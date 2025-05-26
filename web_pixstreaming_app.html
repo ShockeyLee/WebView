@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UE PixStreaming 控制面板</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        .header {
+            background-color: #333;
+            color: white;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-size: 20px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+        }
+        
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ff5555;
+            margin-right: 8px;
+        }
+        
+        .indicator.connected {
+            background-color: #55ff55;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        
+        .pixstream-container {
+            flex: 7;
+            position: relative;
+            background-color: #222;
+            overflow: hidden;
+        }
+        
+        #pixstream-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+        
+        .overlay-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        
+        .overlay-message.visible {
+            display: block;
+        }
+        
+        .control-panel {
+            flex: 3;
+            background-color: white;
+            display: flex;
+            flex-direction: column;
+            padding: 15px;
+            border-left: 1px solid #ddd;
+            max-width: 400px;
+            min-width: 350px;
+            overflow-y: auto;
+        }
+        
+        .panel-section {
+            margin-bottom: 20px;
+        }
+        
+        .panel-section h2 {
+            font-size: 16px;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .camera-view {
+            background-color: #333;
+            height: 240px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            margin-bottom: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .camera-view img {
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .camera-controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .button-container {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.2s;
+        }
+        
+        button.primary {
+            background-color: #3498db;
+            color: white;
+        }
+        
+        button.primary:hover {
+            background-color: #2980b9;
+        }
+        
+        button.success {
+            background-color: #2ecc71;
+            color: white;
+        }
+        
+        button.success:hover {
+            background-color: #27ae60;
+        }
+        
+        button.warning {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        button.warning:hover {
+            background-color: #e67e22;
+        }
+        
+        button.danger {
+            background-color: #e74c3c;
+            color: white;
+        }
+        
+        button.danger:hover {
+            background-color: #c0392b;
+        }
+        
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+        
+        .drone-status {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 5px 15px;
+        }
+        
+        .drone-status .label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .drone-status .value {
+            color: #333;
+        }
+        
+        .target-status {
+            margin-top: 10px;
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 5px 15px;
+        }
+        
+        .log-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            min-height: 150px;
+        }
+        
+        .log-content {
+            flex: 1;
+            background-color: #f7f7f7;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-y: auto;
+            color: #333;
+        }
+        
+        .log-entry {
+            margin-bottom: 4px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .log-entry .timestamp {
+            color: #888;
+        }
+        
+        .log-entry.info .level {
+            color: #3498db;
+        }
+        
+        .log-entry.success .level {
+            color: #2ecc71;
+        }
+        
+        .log-entry.warning .level {
+            color: #f39c12;
+        }
+        
+        .log-entry.error .level {
+            color: #e74c3c;
+        }
+        
+        .progress-container {
+            height: 20px;
+            background-color: #f3f3f3;
+            border-radius: 10px;
+            margin-top: 5px;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background-color: #3498db;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 200px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            background-color: #f7f7f7;
+            border: 1px solid #ddd;
+            border-radius: 4px 4px 0 0;
+            padding: 10px;
+            overflow-y: auto;
+            font-size: 14px;
+        }
+        
+        .chat-input-container {
+            display: flex;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 4px 4px;
+            overflow: hidden;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 10px;
+            border: none;
+            outline: none;
+            font-size: 14px;
+        }
+        
+        .chat-send {
+            padding: 10px 15px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        
+        .chat-send:hover {
+            background-color: #2980b9;
+        }
+        
+        .user-message {
+            margin-bottom: 8px;
+        }
+        
+        .user-message .sender {
+            font-weight: bold;
+            color: #3498db;
+        }
+        
+        .system-message {
+            margin-bottom: 8px;
+            color: #555;
+        }
+        
+        .system-message .sender {
+            font-weight: bold;
+            color: #e67e22;
+        }
+        
+        .match-info-container {
+            background-color: #f7f7f7;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-top: 10px;
+            font-size: 13px;
+        }
+        
+        .match-info {
+            margin-bottom: 5px;
+        }
+        
+        .match-info-label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .key-info {
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-content {
+                flex-direction: column;
+            }
+            
+            .pixstream-container {
+                flex: 1;
+            }
+            
+            .control-panel {
+                max-width: none;
+                height: 500px;
+                overflow-y: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>UE PixStreaming 控制面板</h1>
+        <div class="status-indicator">
+            <div id="connection-indicator" class="indicator"></div>
+            <span id="connection-status">未连接</span>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <div class="pixstream-container">
+            <iframe id="pixstream-frame" src="http://localhost:80/" allowfullscreen></iframe>
+            <div id="overlay-message" class="overlay-message">
+                正在连接到PixStreaming服务器...
+            </div>
+        </div>
+        
+        <div class="control-panel">
+            <div class="panel-section">
+                <h2>无人机相机</h2>
+                <div class="camera-view">
+                    <img id="camera-feed" src="/static/images/placeholder.png" alt="无人机相机画面" />
+                </div>
+                <div class="camera-controls">
+                    <button id="capture-btn" class="primary">捕获图像</button>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>无人机状态</h2>
+                <div class="drone-status">
+                    <div class="label">X 位置:</div>
+                    <div class="value" id="pos-x">0.00</div>
+                    
+                    <div class="label">Y 位置:</div>
+                    <div class="value" id="pos-y">0.00</div>
+                    
+                    <div class="label">Z 位置:</div>
+                    <div class="value" id="pos-z">0.00</div>
+                </div>
+                
+                <div id="mission-progress-container" class="progress-container hidden">
+                    <div id="mission-progress-bar" class="progress-bar"></div>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>目标检测结果</h2>
+                <div id="target-status" class="target-status hidden">
+                    <div class="label">目标类型:</div>
+                    <div class="value" id="target-type">未检测</div>
+                    
+                    <div class="label">目标位置:</div>
+                    <div class="value" id="target-position">未知</div>
+                </div>
+                
+                <div id="match-info-container" class="match-info-container hidden">
+                    <div class="match-info">
+                        <span class="match-info-label">匹配特征点数:</span>
+                        <span id="match-count">0</span>
+                    </div>
+                    <div class="match-info">
+                        <span class="match-info-label">选择特征点ID:</span>
+                        <span id="selected-keypoint">-</span>
+                    </div>
+                    <div class="match-info">
+                        <span class="match-info-label">计算视差值:</span>
+                        <span id="disparity-value">-</span>
+                    </div>
+                    <div class="match-info">
+                        <span class="match-info-label">计算深度:</span>
+                        <span id="depth-value">-</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>任务控制</h2>
+                <div class="button-container">
+                    <button id="connect-btn" class="primary">连接到 AirSim</button>
+                    <button id="takeoff-btn" class="success" disabled>起飞</button>
+                    <button id="land-btn" class="warning" disabled>降落</button>
+                    <button id="detect-btn" class="primary" disabled>检测目标</button>
+                    <button id="flyaround-btn" class="success" disabled>绕飞目标</button>
+                </div>
+            </div>
+            
+            <div class="panel-section">
+                <h2>指令对话</h2>
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages">
+                        <div class="system-message">
+                            <span class="sender">系统:</span>
+                            <span class="message">欢迎使用目标检测与绕飞系统，您可以通过输入指令来控制系统。例如: "检测船只"</span>
+                        </div>
+                    </div>
+                    <div class="chat-input-container">
+                        <input id="chat-input" class="chat-input" type="text" placeholder="输入指令..." />
+                        <button id="chat-send" class="chat-send">发送</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="panel-section log-container">
+                <h2>任务日志</h2>
+                <div id="log-content" class="log-content">
+                    <!-- 日志内容会动态添加 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // DOM元素
+        const pixstreamFrame = document.getElementById('pixstream-frame');
+        const overlayMessage = document.getElementById('overlay-message');
+        const connectionIndicator = document.getElementById('connection-indicator');
+        const connectionStatus = document.getElementById('connection-status');
+        const cameraFeed = document.getElementById('camera-feed');
+        const captureBtn = document.getElementById('capture-btn');
+        const connectBtn = document.getElementById('connect-btn');
+        const takeoffBtn = document.getElementById('takeoff-btn');
+        const landBtn = document.getElementById('land-btn');
+        const detectBtn = document.getElementById('detect-btn');
+        const flyaroundBtn = document.getElementById('flyaround-btn');
+        const logContent = document.getElementById('log-content');
+        const missionProgressContainer = document.getElementById('mission-progress-container');
+        const missionProgressBar = document.getElementById('mission-progress-bar');
+        const chatInput = document.getElementById('chat-input');
+        const chatSend = document.getElementById('chat-send');
+        const chatMessages = document.getElementById('chat-messages');
+        
+        // 检测结果元素
+        const targetStatus = document.getElementById('target-status');
+        const targetType = document.getElementById('target-type');
+        const targetPosition = document.getElementById('target-position');
+        const matchInfoContainer = document.getElementById('match-info-container');
+        const matchCount = document.getElementById('match-count');
+        const selectedKeypoint = document.getElementById('selected-keypoint');
+        const disparityValue = document.getElementById('disparity-value');
+        const depthValue = document.getElementById('depth-value');
+        
+        // 位置显示元素
+        const posX = document.getElementById('pos-x');
+        const posY = document.getElementById('pos-y');
+        const posZ = document.getElementById('pos-z');
+        
+        // API基础URL
+        const API_BASE_URL = 'http://localhost:5000/api';
+        
+        // PixStreaming状态
+        let pixstreamConnected = false;
+        let targetDetected = false;
+        let cameraUpdateInterval = null;
+        
+        // 检查PixStreaming连接状态
+        function checkPixStreamConnection() {
+            try {
+                const frameWindow = pixstreamFrame.contentWindow;
+                // 尝试访问iframe内容，如果成功则表示连接已建立
+                if (frameWindow && frameWindow.document) {
+                    pixstreamConnected = true;
+                    connectionIndicator.classList.add('connected');
+                    connectionStatus.textContent = '已连接';
+                    overlayMessage.classList.remove('visible');
+                    return true;
+                }
+            } catch (e) {
+                // 如果出现跨域错误，可能表示连接已建立但无法访问内容
+                pixstreamConnected = true;
+                connectionIndicator.classList.add('connected');
+                connectionStatus.textContent = '已连接';
+                overlayMessage.classList.remove('visible');
+                return true;
+            }
+            
+            pixstreamConnected = false;
+            connectionIndicator.classList.remove('connected');
+            connectionStatus.textContent = '未连接';
+            overlayMessage.classList.add('visible');
+            return false;
+        }
+        
+        // 初始化时显示连接中消息
+        overlayMessage.classList.add('visible');
+        
+        // 添加日志条目
+        function addLogEntry(message, level = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${level}`;
+            logEntry.innerHTML = `
+                <span class="timestamp">[${timestamp}]</span>
+                <span class="level">[${level.toUpperCase()}]</span>
+                <span class="message">${message}</span>
+            `;
+            logContent.appendChild(logEntry);
+            logContent.scrollTop = logContent.scrollHeight;
+        }
+        
+        // 添加聊天消息
+        function addChatMessage(message, sender = 'user') {
+            const messageElement = document.createElement('div');
+            messageElement.className = sender === 'user' ? 'user-message' : 'system-message';
+            messageElement.innerHTML = `
+                <span class="sender">${sender === 'user' ? '用户:' : '系统:'}</span>
+                <span class="message">${message}</span>
+            `;
+            chatMessages.appendChild(messageElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        // 更新任务进度
+        function updateMissionProgress(progress) {
+            if (progress > 0) {
+                missionProgressContainer.classList.remove('hidden');
+                missionProgressBar.style.width = `${progress}%`;
+            } else {
+                missionProgressContainer.classList.add('hidden');
+            }
+        }
+        
+        // 连接到AirSim
+        async function connectToAirSim() {
+            try {
+                addLogEntry('正在连接到AirSim...');
+                const response = await fetch(`${API_BASE_URL}/connect`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry('成功连接到AirSim!', 'success');
+                    addChatMessage('已成功连接到AirSim', 'system');
+                    // 启用相关按钮
+                    takeoffBtn.disabled = false;
+                    connectBtn.disabled = true;
+                    
+                    // 启动定时相机更新
+                    startCameraUpdates();
+                } else {
+                    addLogEntry(`连接失败: ${data.message}`, 'error');
+                    addChatMessage(`连接失败: ${data.message}`, 'system');
+                }
+            } catch (error) {
+                addLogEntry(`连接请求错误: ${error.message}`, 'error');
+                addChatMessage('连接请求失败，请检查API服务器是否运行', 'system');
+            }
+        }
+        
+        // 启动定时相机更新
+        function startCameraUpdates() {
+            if (cameraUpdateInterval) {
+                clearInterval(cameraUpdateInterval);
+            }
+            
+            // 每5秒更新一次相机画面
+            cameraUpdateInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/capture_image`, {
+                        method: 'POST'
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success && data.image_url) {
+                        cameraFeed.src = `${data.image_url}?t=${new Date().getTime()}`;
+                    }
+                } catch (error) {
+                    console.error('获取相机图像错误:', error);
+                }
+            }, 5000);
+        }
+        
+        // 停止定时相机更新
+        function stopCameraUpdates() {
+            if (cameraUpdateInterval) {
+                clearInterval(cameraUpdateInterval);
+                cameraUpdateInterval = null;
+            }
+        }
+        
+        // 无人机起飞
+        async function takeoff() {
+            try {
+                addLogEntry('正在起飞...');
+                const response = await fetch(`${API_BASE_URL}/takeoff`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry('起飞成功!', 'success');
+                    addChatMessage('无人机已成功起飞', 'system');
+                    // 启用相关按钮
+                    takeoffBtn.disabled = true;
+                    landBtn.disabled = false;
+                    detectBtn.disabled = false;
+                } else {
+                    addLogEntry(`起飞失败: ${data.message}`, 'error');
+                    addChatMessage(`起飞失败: ${data.message}`, 'system');
+                }
+            } catch (error) {
+                addLogEntry(`起飞请求错误: ${error.message}`, 'error');
+                addChatMessage('起飞请求失败', 'system');
+            }
+        }
+        
+        // 无人机降落
+        async function land() {
+            try {
+                addLogEntry('正在降落...');
+                const response = await fetch(`${API_BASE_URL}/land`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry('降落成功!', 'success');
+                    addChatMessage('无人机已成功降落', 'system');
+                    // 更新按钮状态
+                    landBtn.disabled = true;
+                    takeoffBtn.disabled = false;
+                    detectBtn.disabled = true;
+                    flyaroundBtn.disabled = true;
+                    targetDetected = false;
+                    updateMissionProgress(0);
+                    
+                    // 隐藏目标状态
+                    targetStatus.classList.add('hidden');
+                    matchInfoContainer.classList.add('hidden');
+                } else {
+                    addLogEntry(`降落失败: ${data.message}`, 'error');
+                    addChatMessage(`降落失败: ${data.message}`, 'system');
+                }
+            } catch (error) {
+                addLogEntry(`降落请求错误: ${error.message}`, 'error');
+                addChatMessage('降落请求失败', 'system');
+            }
+        }
+        
+        // 检测目标
+        async function detectTarget(targetType = '') {
+            try {
+                addLogEntry(`正在开始目标检测任务${targetType ? ': ' + targetType : ''}...`);
+                detectBtn.disabled = true;
+                
+                const url = targetType 
+                    ? `${API_BASE_URL}/detect_target?target_type=${encodeURIComponent(targetType)}`
+                    : `${API_BASE_URL}/detect_target`;
+                
+                const response = await fetch(url, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLogEntry(`目标检测成功! 类型: ${data.target_type}`, 'success');
+                    addChatMessage(`已成功检测到目标: ${data.target_type}`, 'system');
+                    
+                    // 显示目标状态
+                    targetStatus.classList.remove('hidden');
+                    targetType.textContent = data.target_type;
+                    targetPosition.textContent = `X: ${data.target_position.x.toFixed(2)}, Y: ${data.target_position.y.toFixed(2)}, Z: ${data.target_position.z.toFixed(2)}`;
+                    
+                    // 显示匹配信息
+                    if (data.match_info) {
+                        matchInfoContainer.classList.remove('hidden');
+                        matchCount.textContent = data.match_info.match_count || '0';
+                        selectedKeypoint.textContent = data.match_info.selected_keypoint_id || '-';
+                        disparityValue.textContent = data.match_info.disparity ? `${data.match_info.disparity.toFixed(2)} 像素` : '-';
+                        depthValue.textContent = data.match_info.depth ? `${data.match_info.depth.toFixed(2)} 米` : '-';
+                    }
+                    
+                    // 更新相机图像
+                    if (data.image_url) {
+                        cameraFeed.src = data.image_url;
+                    }
+                    
+                    // 启用绕飞按钮
+                    flyaroundBtn.disabled = false;
+                    targetDetected = true;
+                    detectBtn.disabled = false;
+                } else {
+                    addLogEntry(`目标检测失败: ${data.message}`, 'error');
+                    addChatMessage(`目标检测失败: ${data.message}`, 'system');
+                    
+                    // 如果有错误图像，也显示出来
+                    if (data.image_url) {
+                        cameraFeed.src = data.image_url;
+                    }
+                    
+                    detectBtn.disabled = false;
+                }
+            } catch (error) {
+                addLogEntry(`目标检测请求错误: ${error.message}`, 'error');
+                addChatMessage('目标检测请求失败', 'system');
+                detectBtn.disabled = false;
+            }
+        }
+        
+        // 绕飞目标
+        async function flyAroundTarget() {
+            if (!targetDetected) {
+                addLogEntry('请先检测目标!', 'warning');
+                addChatMessage('请先检测目标后再执行绕飞', 'system');
+                return;
+            }
+            
+            try {
+                addLogEntry('正在开始绕飞任务...');
+                addChatMessage('开始执行绕飞任务', 'system');
+                flyaroundBtn.disabled = true;
+                
+                const response = await fetch(`${API_BASE_URL}/fly_around`, {
+                    method: 'POST'
+                });
+                
+                // 这是一个长时间运行的任务，所以我们立即设置进度条
+                updateMissionProgress(1);
+                
+                // 启动进度轮询
+                pollMissionProgress();
+            } catch (error) {
+                addLogEntry(`绕飞请求错误: ${error.message}`, 'error');
+                addChatMessage('绕飞请求失败', 'system');
+                flyaroundBtn.disabled = false;
+            }
+        }
+        
+        // 轮询任务进度
+        async function pollMissionProgress() {
+            const progressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/mission_status`);
+                    const data = await response.json();
+                    
+                    if (data.mission_active) {
+                        // 更新进度
+                        updateMissionProgress(data.progress);
+                        
+                        // 更新位置信息
+                        if (data.position) {
+                            posX.textContent = data.position.x.toFixed(2);
+                            posY.textContent = data.position.y.toFixed(2);
+                            posZ.textContent = data.position.z.toFixed(2);
+                        }
+                    } else {
+                        // 任务完成
+                        clearInterval(progressInterval);
+                        
+                        if (data.success) {
+                            addLogEntry('绕飞任务完成!', 'success');
+                            addChatMessage('绕飞任务已成功完成', 'system');
+                            updateMissionProgress(100);
+                            
+                            // 2秒后隐藏进度条
+                            setTimeout(() => {
+                                updateMissionProgress(0);
+                            }, 2000);
+                        } else {
+                            addLogEntry(`绕飞任务失败: ${data.message}`, 'error');
+                            addChatMessage(`绕飞任务失败: ${data.message}`, 'system');
+                            updateMissionProgress(0);
+                        }
+                        
+                        flyaroundBtn.disabled = false;
+                    }
+                } catch (error) {
+                    console.error('轮询进度错误:', error);
+                }
+            }, 500);
+        }
+        
+        // 捕获单张图像
+        async function captureImage() {
+            try {
+                addLogEntry('正在捕获图像...');
+                
+                const response = await fetch(`${API_BASE_URL}/capture_image`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.image_url) {
+                    cameraFeed.src = data.image_url;
+                    addLogEntry('图像捕获成功!', 'success');
+                } else {
+                    addLogEntry(`图像捕获失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                addLogEntry(`图像捕获请求错误: ${error.message}`, 'error');
+            }
+        }
+        
+        // 处理用户聊天输入
+        function handleChatInput() {
+            const message = chatInput.value.trim();
+            if (!message) return;
+            
+            // 添加用户消息
+            addChatMessage(message);
+            
+            // 清空输入框
+            chatInput.value = '';
+            
+            // 处理指令
+            processCommand(message);
+        }
+        
+        // 处理用户指令
+        async function processCommand(command) {
+            const lowerCommand = command.toLowerCase();
+            
+            // 连接指令
+            if (lowerCommand.includes('连接') || lowerCommand.includes('connect')) {
+                if (connectBtn.disabled) {
+                    addChatMessage('已经连接到AirSim', 'system');
+                } else {
+                    connectToAirSim();
+                }
+                return;
+            }
+            
+            // 起飞指令
+            if (lowerCommand.includes('起飞') || lowerCommand.includes('takeoff')) {
+                if (takeoffBtn.disabled) {
+                    if (landBtn.disabled) {
+                        addChatMessage('请先连接到AirSim', 'system');
+                    } else {
+                        addChatMessage('无人机已经起飞', 'system');
+                    }
+                } else {
+                    takeoff();
+                }
+                return;
+            }
+            
+            // 降落指令
+            if (lowerCommand.includes('降落') || lowerCommand.includes('land')) {
+                if (landBtn.disabled) {
+                    addChatMessage('无人机尚未起飞或已经降落', 'system');
+                } else {
+                    land();
+                }
+                return;
+            }
+            
+            // 检测目标指令
+            if (lowerCommand.includes('检测') || lowerCommand.includes('detect')) {
+                if (detectBtn.disabled && !takeoffBtn.disabled) {
+                    addChatMessage('请先起飞无人机', 'system');
+                    return;
+                }
+                
+                if (detectBtn.disabled && targetDetected) {
+                    addChatMessage('已经检测到目标', 'system');
+                    return;
+                }
+                
+                // 提取目标类型
+                let targetType = '';
+                
+                if (lowerCommand.includes('检测')) {
+                    const matches = lowerCommand.match(/检测\s*([^\s,，。.]+)/);
+                    if (matches && matches[1]) {
+                        targetType = matches[1];
+                    }
+                } else if (lowerCommand.includes('detect')) {
+                    const matches = lowerCommand.match(/detect\s*([^\s,，。.]+)/);
+                    if (matches && matches[1]) {
+                        targetType = matches[1];
+                    }
+                }
+                
+                // 执行检测
+                detectTarget(targetType);
+                return;
+            }
+            
+            // 绕飞指令
+            if (lowerCommand.includes('绕飞') || lowerCommand.includes('fly around')) {
+                if (flyaroundBtn.disabled && !targetDetected) {
+                    addChatMessage('请先检测目标', 'system');
+                } else if (flyaroundBtn.disabled) {
+                    addChatMessage('绕飞任务正在进行中', 'system');
+                } else {
+                    flyAroundTarget();
+                }
+                return;
+            }
+            
+            // 截图指令
+            if (lowerCommand.includes('截图') || lowerCommand.includes('拍照') || lowerCommand.includes('capture')) {
+                captureImage();
+                return;
+            }
+            
+            // 未识别的指令
+            addChatMessage('未识别的指令。可用指令: 连接、起飞、降落、检测 [目标类型]、绕飞、截图', 'system');
+        }
+        
+        // 事件监听器
+        connectBtn.addEventListener('click', connectToAirSim);
+        takeoffBtn.addEventListener('click', takeoff);
+        landBtn.addEventListener('click', land);
+        detectBtn.addEventListener('click', () => detectTarget());
+        flyaroundBtn.addEventListener('click', flyAroundTarget);
+        captureBtn.addEventListener('click', captureImage);
+        
+        // 聊天输入事件
+        chatSend.addEventListener('click', handleChatInput);
+        chatInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                handleChatInput();
+            }
+        });
+        
+        // PixStream Frame加载事件
+        pixstreamFrame.addEventListener('load', () => {
+            checkPixStreamConnection();
+        });
+        
+        // 定期检查连接状态
+        setInterval(checkPixStreamConnection, 2000);
+        
+        // 添加初始日志
+        addLogEntry('应用已初始化，等待连接...');
+        
+        // 轮询无人机位置
+        setInterval(async () => {
+            if (connectionStatus.textContent === '已连接') {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/drone_status`);
+                    const data = await response.json();
+                    
+                    if (data.connected) {
+                        posX.textContent = data.position.x.toFixed(2);
+                        posY.textContent = data.position.y.toFixed(2);
+                        posZ.textContent = data.position.z.toFixed(2);
+                    }
+                } catch (error) {
+                    console.error('获取无人机状态错误:', error);
+                }
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

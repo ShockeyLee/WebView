@@ -1,34 +1,35 @@
-import os
+# 使用Qwen-VLimport os
 import time
 import asyncio
 import uuid
 import base64
+import math
+import numpy as np
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 import airsim
-import numpy as np
 import cv2
 import threading
 from typing import Dict, Optional, List, Any
 import uvicorn
-
+import os
 # 导入我们现有的算法模块
 from qwen_vl_client import QwenVLClient
 from detection_utils import detect_target_with_qwen, match_features, find_closest_keypoint
 
 # 创建FastAPI应用程序
-app = FastAPI(title="UE PixStreaming API", description="API for controlling AirSim through UE PixStreaming")
+app = FastAPI(title="Enhanced UE PixStreaming API", description="Enhanced API for AirSim with grid search")
 
 # 允许跨域请求
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # 允许所有来源
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_methods=["*"],  # 允许所有方法
-    allow_headers=["*"],  # 允许所有头
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # 创建图像存储目录
@@ -39,12 +40,15 @@ os.makedirs(IMAGES_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 全局状态
-control_client = None  # 用于无人机控制的客户端
-image_client = None    # 用于图像处理的客户端
-status_client = None   # 用于状态监控的客户端
+control_client = None
+image_client = None
+status_client = None
 camera_name = "0"
 target_position = None
 is_api_control_enabled = False
+latest_qwen_result_image = None  # 存储最新的Qwen检测结果图像
+
+# 任务状态管理
 current_mission_status = {
     "mission_active": False,
     "progress": 0,
@@ -52,7 +56,29 @@ current_mission_status = {
     "message": "",
     "position": {"x": 0.0, "y": 0.0, "z": 0.0}
 }
+
+# 搜索状态管理
+current_search_status = {
+    "search_active": False,
+    "progress": 0,
+    "coverage": 0,
+    "target_found": False,
+    "target_type": None,
+    "current_position": {"x": 0.0, "y": 0.0, "z": 0.0},
+    "current_index": 0,
+    "total_points": 0,
+    "success": False,
+    "message": ""
+}
+
 mission_thread = None
+search_thread = None
+
+class SearchParams(BaseModel):
+    area: int = 1000
+    spacing: int = 100
+    altitude: int = 20
+    target_type: str = ""
 
 # 连接到AirSim
 @app.post("/api/connect")
@@ -60,23 +86,20 @@ async def connect_to_airsim():
     global control_client, image_client, status_client, is_api_control_enabled
     
     try:
-        # 创建控制客户端
         control_client = airsim.MultirotorClient()
         control_client.confirmConnection()
         
-        # 创建图像处理客户端
         image_client = airsim.MultirotorClient()
         image_client.confirmConnection()
         
-        # 创建状态监控客户端
         status_client = airsim.MultirotorClient()
         status_client.confirmConnection()
         
         return JSONResponse(content={"success": True, "message": "Connected to AirSim with all required clients"})
     except Exception as e:
-        # 确保在出错时清理资源
         control_client = None
         image_client = None
+        status_client = None
         return JSONResponse(content={"success": False, "message": str(e)})
 
 # 启用API控制
@@ -91,7 +114,7 @@ async def enable_api_control():
         control_client.enableApiControl(True)
         control_client.armDisarm(True)
         is_api_control_enabled = True
-        control_client.simSetCameraFov(camera_name,30)
+        control_client.simSetCameraFov(camera_name, 30)
         
         return JSONResponse(content={"success": True, "message": "API control enabled"})
     except Exception as e:
@@ -106,15 +129,13 @@ async def takeoff():
         return JSONResponse(content={"success": False, "message": "Not connected to AirSim"})
     
     try:
-        # 确保API控制已启用
         if not is_api_control_enabled:
             control_client.enableApiControl(True)
             control_client.armDisarm(True)
             is_api_control_enabled = True
         
-        # 执行起飞
         control_client.takeoffAsync().join()
-        control_client.simSetCameraFov(camera_name,30)
+        control_client.simSetCameraFov(camera_name, 30)
         
         return JSONResponse(content={"success": True, "message": "Takeoff successful"})
     except Exception as e:
@@ -123,12 +144,16 @@ async def takeoff():
 # 降落
 @app.post("/api/land")
 async def land():
-    global control_client, is_api_control_enabled
+    global control_client, current_search_status
     
     if not control_client:
         return JSONResponse(content={"success": False, "message": "Not connected to AirSim"})
     
     try:
+        # 停止所有正在进行的任务
+        current_search_status["search_active"] = False
+        current_mission_status["mission_active"] = False
+        
         control_client.landAsync().join()
         
         return JSONResponse(content={"success": True, "message": "Landing successful"})
@@ -144,7 +169,6 @@ async def capture_image():
         return JSONResponse(content={"success": False, "message": "Not connected to AirSim"})
     
     try:
-        # 捕获图像
         responses = image_client.simGetImages([
             airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False)
         ])
@@ -152,19 +176,15 @@ async def capture_image():
         if not responses:
             return JSONResponse(content={"success": False, "message": "Failed to capture image"})
         
-        # 处理图像数据
         response = responses[0]
         img = np.frombuffer(response.image_data_uint8, dtype=np.uint8)
         img = img.reshape(response.height, response.width, 3)
         
-        # 生成唯一文件名
         filename = f"drone_image_{int(time.time())}.png"
         filepath = os.path.join(IMAGES_DIR, filename)
         
-        # 保存图像
         cv2.imwrite(filepath, img)
         
-        # 返回图像URL
         image_url = f"/static/images/{filename}"
         
         return JSONResponse(content={"success": True, "image_url": image_url})
@@ -180,10 +200,8 @@ async def get_drone_status():
         return JSONResponse(content={"connected": False})
     
     try:
-        # 获取无人机位置
         state = status_client.simGetGroundTruthKinematics()
         
-        # 构建返回数据
         return JSONResponse(content={
             "connected": True,
             "position": {
@@ -202,6 +220,183 @@ async def get_drone_status():
     except Exception as e:
         return JSONResponse(content={"connected": False, "error": str(e)})
 
+# 生成网格搜索路径
+def generate_grid_search_path(area: int, spacing: int, altitude: int):
+    """生成S型网格搜索路径"""
+    search_path = []
+    grid_points = int(area / spacing)
+    start_x = -area / 2
+    start_y = -area / 2
+    
+    # S型搜索路径
+    for row in range(grid_points + 1):
+        y = start_y + row * spacing
+        
+        if row % 2 == 0:
+            # 从左到右
+            for col in range(grid_points + 1):
+                x = start_x + col * spacing
+                search_path.append({"x": x, "y": y, "z": -altitude})
+        else:
+            # 从右到左
+            for col in range(grid_points, -1, -1):
+                x = start_x + col * spacing
+                search_path.append({"x": x, "y": y, "z": -altitude})
+    
+    return search_path
+
+# 执行网格搜索任务
+def execute_grid_search(search_params: SearchParams):
+    global control_client, image_client, current_search_status, target_position
+    
+    try:
+        # 重置搜索状态
+        current_search_status.update({
+            "search_active": True,
+            "progress": 0,
+            "coverage": 0,
+            "target_found": False,
+            "target_type": None,
+            "current_index": 0,
+            "success": False,
+            "message": "Starting grid search"
+        })
+        
+        # 生成搜索路径
+        search_path = generate_grid_search_path(
+            search_params.area, 
+            search_params.spacing, 
+            search_params.altitude
+        )
+        
+        current_search_status["total_points"] = len(search_path)
+        
+        # 执行搜索
+        for i, point in enumerate(search_path):
+            if not current_search_status["search_active"]:
+                break
+                
+            # 更新当前位置和进度
+            current_search_status["current_index"] = i
+            current_search_status["current_position"] = point
+            current_search_status["progress"] = int((i / len(search_path)) * 100)
+            current_search_status["coverage"] = int((i / len(search_path)) * 100)
+            
+            # 移动到搜索点
+            control_client.moveToPositionAsync(
+                point["x"], point["y"], point["z"], 15
+            ).join()
+            
+            # 等待稳定
+            time.sleep(1)
+            
+            # 捕获图像并检测目标
+            try:
+                responses = image_client.simGetImages([
+                    airsim.ImageRequest(camera_name, airsim.ImageType.Scene, False, False)
+                ])
+                
+                if responses:
+                    response = responses[0]
+                    img = np.frombuffer(response.image_data_uint8, dtype=np.uint8)
+                    img = img.reshape(response.height, response.width, 3)
+                    
+                    # 保存搜索图像
+                    filename = f"search_image_{i}_{int(time.time())}.png"
+                    filepath = os.path.join(IMAGES_DIR, filename)
+                    cv2.imwrite(filepath, img)
+                    
+                    # 使用Qwen-VL检测目标
+                    detection_result = detect_target_with_qwen(
+                        filepath, 
+                        target_type=search_params.target_type
+                    )
+                    
+                    # 保存Qwen检测结果图像路径
+                    global latest_qwen_result_image
+                    latest_qwen_result_image = f"/static/images/{filename}"
+                    
+                    if detection_result and detection_result.get("bbox_2d"):
+                        # 发现目标！
+                        current_search_status.update({
+                            "target_found": True,
+                            "target_type": detection_result.get("sub_label") or detection_result.get("label"),
+                            "success": True,
+                            "message": f"Target found at position {i+1}/{len(search_path)}"
+                        })
+                        
+                        # 保存目标位置（简化版，实际应该进行精确定位）
+                        target_position = {
+                            "x": float(point["x"]),
+                            "y": float(point["y"]),
+                            "z": float(point["z"])
+                        }
+                        
+                        break
+                        
+            except Exception as e:
+                print(f"Detection error at point {i}: {e}")
+                continue
+        
+        # 搜索完成
+        current_search_status["search_active"] = False
+        if not current_search_status["target_found"]:
+            current_search_status.update({
+                "progress": 100,
+                "coverage": 100,
+                "success": True,
+                "message": "Search completed - no target found"
+            })
+        
+    except Exception as e:
+        current_search_status.update({
+            "search_active": False,
+            "success": False,
+            "message": str(e)
+        })
+
+# 开始网格搜索
+@app.post("/api/start_grid_search")
+async def start_grid_search(search_params: SearchParams):
+    global control_client, search_thread, current_search_status
+    
+    if not control_client:
+        return JSONResponse(content={"success": False, "message": "Not connected to AirSim"})
+    
+    # 如果已经有搜索任务在运行，先停止它
+    if search_thread and search_thread.is_alive():
+        current_search_status["search_active"] = False
+        search_thread.join(timeout=2.0)
+    
+    # 启动新的搜索任务线程
+    search_thread = threading.Thread(target=execute_grid_search, args=(search_params,))
+    search_thread.daemon = True
+    search_thread.start()
+    
+    return JSONResponse(content={"success": True, "message": "Grid search started"})
+
+# 获取搜索状态
+@app.get("/api/search_status")
+async def get_search_status():
+    global current_search_status
+    return JSONResponse(content=current_search_status)
+
+# 获取Qwen检测结果
+@app.get("/api/get_qwen_result")
+async def get_qwen_result():
+    global latest_qwen_result_image
+    
+    if latest_qwen_result_image:
+        return JSONResponse(content={
+            "success": True, 
+            "image_url": latest_qwen_result_image
+        })
+    else:
+        return JSONResponse(content={
+            "success": False, 
+            "message": "No Qwen result available"
+        })
+
 # 获取相机参数
 def get_camera_params(client, camera_name):
     """获取相机内外参数"""
@@ -213,13 +408,13 @@ def get_camera_params(client, camera_name):
     fov = camera_info.fov
     
     # 相机内参
-    x0 = 640  # 主点x坐标（假设图像宽度为1280）
-    y0 = 480  # 主点y坐标（假设图像高度为960）
+    x0 = 640  # 主点x坐标
+    y0 = 480  # 主点y坐标
     f = 1280/(2 * np.tan(np.radians(fov / 2)))  # 焦距
     
     return x0, y0, f, xs, ys, zs, q
 
-# 四元数转旋转矩阵函数
+# 四元数转旋转矩阵
 def quaternion_to_rotation_matrix(q):
     """将四元数转换为旋转矩阵"""
     w, x, y, z = q.w_val, q.x_val, q.y_val, q.z_val
@@ -229,14 +424,9 @@ def quaternion_to_rotation_matrix(q):
         [2*x*z - 2*w*y, 2*y*z + 2*w*x, 1 - 2*x*x - 2*y*y]
     ])
 
-# 相机坐标转世界坐标函数
+# 相机坐标转世界坐标
 def camera_to_world(camera_coords, rotation_matrix, translation_vector):
-    """
-    将相机坐标转换为UE的世界坐标（左手坐标系适配）
-    - Y_camera -> Y_world（主光轴一致）
-    - X_camera -> Z_world
-    - Z_camera -> X_world
-    """
+    """将相机坐标转换为UE的世界坐标"""
     camera_coords_adjusted = np.array([
         camera_coords[2],  # Z_camera -> X_world
         camera_coords[0],  # X_camera -> Z_world
@@ -257,7 +447,6 @@ def calculate_depth_and_position(pixel1, pixel2, camera_params1, camera_params2)
     # 计算视差
     disparity = abs(x1 - x2)
     
-    # 使用视差计算深度(Z)
     if disparity == 0:
         raise ValueError("视差为零，无法计算深度")
     
@@ -275,7 +464,7 @@ def calculate_depth_and_position(pixel1, pixel2, camera_params1, camera_params2)
     
     return X, Y, Z, X_, Y_
 
-# 目标检测任务
+# 精确目标检测
 @app.post("/api/detect_target")
 async def detect_target(target_type: str = None):
     global control_client, image_client, camera_name, target_position
@@ -326,8 +515,11 @@ async def detect_target(target_type: str = None):
         camera_params2 = get_camera_params(image_client, camera_name)
         
         # 5. 使用Qwen-VL模型检测目标
-        # 如果提供了目标类型，则使用该目标类型进行检测
         detection_result = detect_target_with_qwen(img1_path, target_type=target_type)
+        
+        # 保存Qwen检测结果图像路径
+        global latest_qwen_result_image
+        latest_qwen_result_image = f"/static/images/{img1_filename}"
         
         if not detection_result or not detection_result["bbox_2d"]:
             return JSONResponse(content={
@@ -375,7 +567,6 @@ async def detect_target(target_type: str = None):
         }
         
         # 10. 可视化检测结果
-        # 创建可视化图像
         visualization_img = img1.copy()
         
         # 绘制检测框
@@ -427,7 +618,42 @@ async def detect_target(target_type: str = None):
         traceback.print_exc()
         return JSONResponse(content={"success": False, "message": str(e)})
 
-# 执行绕飞任务
+# PID控制器类
+class PIDController:
+    """简单的PID控制器"""
+    def __init__(self, kp, ki, kd, setpoint=0.0):
+        self.kp = kp
+        self.ki = ki
+        self.kd = kd
+        self.setpoint = setpoint
+        self.integral = 0.0
+        self.previous_error = 0.0
+        self.previous_time = time.time()
+    
+    def update(self, current_value):
+        current_time = time.time()
+        dt = current_time - self.previous_time
+        
+        if dt <= 0.0:
+            dt = 0.01
+        
+        error = self.setpoint - current_value
+        self.integral += error * dt
+        derivative = (error - self.previous_error) / dt
+        
+        output = self.kp * error + self.ki * self.integral + self.kd * derivative
+        
+        self.previous_error = error
+        self.previous_time = current_time
+        
+        return output
+    
+    def reset(self):
+        self.integral = 0.0
+        self.previous_error = 0.0
+        self.previous_time = time.time()
+
+# 执行绕飞任务 - 改进版
 def execute_fly_around(target_world_coords):
     global control_client, current_mission_status
     
@@ -439,58 +665,74 @@ def execute_fly_around(target_world_coords):
         current_mission_status["message"] = "Starting fly-around mission"
         
         # 设置飞行参数
-        center = np.array([[target_world_coords["x"]], [target_world_coords["y"]]])
-        radius = 500  # 圆的半径（米）
-        speed = 15     # 速度（米/秒）
-        clock_wise = True  # 旋转方向
-        target_point = center  # 无人机始终朝向圆心
-        altitude = -20  # 飞行高度
-        num_circles = 1  # 完成的圈数
+        center_x = target_world_coords["x"]
+        center_y = target_world_coords["y"]
+        altitude = -200.0  # 绕飞高度
+        radius = 1000.0     # 绕飞半径
+        speed = 8.0       # 绕飞速度
+        clockwise = True  # 顺时针
+        num_circles = 1   # 绕飞圈数
         
-        # 初始化位置历史
-        pos_reserve = np.array([[0.], [0.], [altitude]])
+        print(f"开始圆周绕飞 - 中心:({center_x:.1f}, {center_y:.1f}) 高度:{altitude}m 半径:{radius}m")
         
-        # 控制增益
-        k_radial = 0.6  # 径向控制增益
+        # 获取当前位置
+        state = control_client.simGetGroundTruthKinematics()
+        current_pos = np.array([state.position.x_val, state.position.y_val, state.position.z_val])
         
-        # 可视化目标圆
-        circle_points = []
-        for i in range(36):  # 用36个点绘制圆
-            angle = i * (2 * np.pi / 36)
-            circle_x = center[0, 0] + radius * np.cos(angle)
-            circle_y = center[1, 0] + radius * np.sin(angle)
-            circle_points.append(airsim.Vector3r(circle_x, circle_y, altitude))
+        # 计算最近的圆周点
+        center_2d = np.array([center_x, center_y])
+        current_2d = current_pos[0:2]
         
-        # 可视化圆和目标
-        control_client.simPlotLineStrip(circle_points, color_rgba=[0.0, 1.0, 0.0, 1.0], thickness=5.0, is_persistent=True)
-        control_client.simPlotPoints([airsim.Vector3r(float(target_point[0, 0]), float(target_point[1, 0]), altitude)], 
-                               size=20.0, color_rgba=[1.0, 1.0, 0.0, 1.0], is_persistent=True)
+        # 从当前位置到圆心的向量
+        to_center = center_2d - current_2d
+        distance_to_center = np.linalg.norm(to_center)
         
-        # 移动到圆边缘开始
-        start_x = center[0, 0] + radius
-        start_y = center[1, 0]
-        control_client.moveToPositionAsync(start_x, start_y, altitude, 20).join()
+        if distance_to_center > 0.1:  # 避免除零
+            # 单位向量
+            direction = to_center / distance_to_center
+            # 圆周上最近的点
+            nearest_point = center_2d - direction * radius
+        else:
+            # 如果当前就在圆心，默认选择圆心右侧的点
+            nearest_point = np.array([center_x + radius, center_y])
+        
+        start_x = nearest_point[0]
+        start_y = nearest_point[1]
+        
+        print(f"移动到圆周最近点: ({start_x:.1f}, {start_y:.1f}, {altitude:.1f})")
+        
+        # 初始化高度PID控制器
+        altitude_pid = PIDController(kp=2.5, ki=0.15, kd=0.8, setpoint=altitude)
+        
+        # 控制参数
+        k_radial = 0.8  # 径向控制增益
+        max_v_z = 1.0   # 最大垂直速度
+        
+        center = np.array([[center_x], [center_y]])
+        
+        # 移动到起始点
+        control_client.moveToPositionAsync(start_x, start_y, altitude, 15).join()
         time.sleep(1)
         
-        # 获取初始位置进行角度跟踪
+        # 获取实际位置并初始化角度跟踪
         state = control_client.simGetGroundTruthKinematics()
-        pos = np.array([[state.position.x_val], [state.position.y_val], [state.position.z_val]])
-        dp = pos[0:2] - center
+        actual_pos = np.array([state.position.x_val, state.position.y_val, state.position.z_val])
+        pos = np.array([[actual_pos[0]], [actual_pos[1]], [actual_pos[2]]])
         
-        # 记录起始角度
-        start_angle = np.arctan2(dp[1, 0], dp[0, 0])
-        prev_angle = start_angle
+        dp = pos[0:2] - center
+        prev_angle = math.atan2(dp[1, 0], dp[0, 0])
         angle_accumulated = 0.0
         
+        print(f"开始绕飞，起始角度: {math.degrees(prev_angle):.2f}°")
+        
+        last_report_time = time.time()
+        
         # 主控制循环
-        while True:
-            # 检查任务是否被取消
-            if not current_mission_status["mission_active"]:
-                break
-                
-            # 获取当前无人机位置（使用control_client避免资源竞争）
+        while current_mission_status["mission_active"]:
+            # 获取当前状态
             state = control_client.simGetGroundTruthKinematics()
             pos = np.array([[state.position.x_val], [state.position.y_val], [state.position.z_val]])
+            current_altitude = pos[2, 0]
             
             # 更新位置信息
             current_mission_status["position"] = {
@@ -499,86 +741,93 @@ def execute_fly_around(target_world_coords):
                 "z": float(pos[2, 0])
             }
             
-            # 计算从圆心到无人机的向量
+            # 计算径向信息
             dp = pos[0:2] - center
             current_radius = np.linalg.norm(dp)
-            
-            # 计算当前角度
-            current_angle = np.arctan2(dp[1, 0], dp[0, 0])
+            current_angle = math.atan2(dp[1, 0], dp[0, 0])
             
             # 计算角度变化（处理角度跳变）
             angle_diff = current_angle - prev_angle
+            if angle_diff > math.pi:
+                angle_diff -= 2 * math.pi
+            elif angle_diff < -math.pi:
+                angle_diff += 2 * math.pi
             
-            # 处理角度跳变（当从接近+π到-π或从接近-π到+π）
-            if angle_diff > np.pi:
-                angle_diff -= 2 * np.pi
-            elif angle_diff < -np.pi:
-                angle_diff += 2 * np.pi
-            
-            # 更新累积角度（顺时针为负，逆时针为正）
-            if clock_wise:
-                angle_accumulated -= angle_diff  # 顺时针时角度减小
+            # 更新累积角度
+            if clockwise:
+                angle_accumulated -= angle_diff
             else:
-                angle_accumulated += angle_diff  # 逆时针时角度增加
+                angle_accumulated += angle_diff
             
             # 更新进度
-            progress = min(abs(angle_accumulated) / (2 * np.pi * num_circles) * 100, 99)
+            progress = min(abs(angle_accumulated) / (2 * math.pi * num_circles) * 100, 99)
             current_mission_status["progress"] = progress
             
-            # 检查是否完成了所需圈数
-            if abs(angle_accumulated) >= 2 * np.pi * num_circles:
+            # 状态报告（每2秒）
+            current_time = time.time()
+            if current_time - last_report_time >= 2.0:
+                altitude_error = abs(current_altitude - altitude)
+                radius_error = abs(current_radius - radius)
+                print(f"进度:{progress:.1f}% 高度误差:{altitude_error:.2f}m 半径误差:{radius_error:.1f}m")
+                last_report_time = current_time
+            
+            # 检查是否完成
+            if abs(angle_accumulated) >= 2 * math.pi * num_circles:
+                circles_completed = abs(angle_accumulated) / (2 * math.pi)
+                print(f"✓ 绕飞完成! 实际完成:{circles_completed:.2f}圈")
                 current_mission_status["progress"] = 100
                 current_mission_status["success"] = True
-                current_mission_status["message"] = f"Completed {num_circles} circle(s)"
+                current_mission_status["message"] = f"Completed {circles_completed:.2f} circle(s)"
                 break
             
-            # 归一化径向向量
-            if current_radius > 0.1:  # 避免除零
+            # 计算径向控制（保持半径）
+            if current_radius > 0.1:
                 dp_normalized = dp / current_radius
             else:
-                dp_normalized = np.array([[1.0], [0.0]])  # 如果在中心，则默认方向
+                dp_normalized = np.array([[1.0], [0.0]])
             
-            # 计算径向速度分量（用于半径控制）
             radius_error = current_radius - radius
             v_radial = -k_radial * radius_error * dp_normalized
             
-            # 计算切向速度方向向量
-            theta = np.arctan2(dp[1, 0], dp[0, 0])
-            if clock_wise:
-                theta += np.pi / 2
+            # 计算切向速度（圆周运动）
+            theta = math.atan2(dp[1, 0], dp[0, 0])
+            if clockwise:
+                theta += math.pi / 2
             else:
-                theta -= np.pi / 2
-            v_tangential = speed * np.array([[np.cos(theta)], [np.sin(theta)]])
+                theta -= math.pi / 2
             
-            # 计算最终速度命令
-            v_cmd = v_radial + v_tangential
+            v_tangential = speed * np.array([[math.cos(theta)], [math.sin(theta)]])
             
-            # 必要时限制速度
-            v_cmd_magnitude = np.linalg.norm(v_cmd)
-            if v_cmd_magnitude > speed:
-                v_cmd = v_cmd * (speed / v_cmd_magnitude)
+            # 合成水平速度
+            v_cmd_xy = v_radial + v_tangential
             
-            # 计算所需偏航角以指向目标
-            target_direction = target_point - pos[0:2]
-            yaw = np.arctan2(target_direction[1, 0], target_direction[0, 0])
+            # 限制水平速度
+            v_cmd_xy_magnitude = np.linalg.norm(v_cmd_xy)
+            if v_cmd_xy_magnitude > speed * 1.2:
+                v_cmd_xy = v_cmd_xy * (speed * 1.2 / v_cmd_xy_magnitude)
             
-            # 应用速度命令和偏航控制
+            # PID高度控制
+            v_z = altitude_pid.update(current_altitude)
+            v_z = max(-max_v_z, min(max_v_z, v_z))
+            
+            # 计算偏航角（朝向圆心）
+            target_direction = center - pos[0:2]
+            yaw = math.atan2(target_direction[1, 0], target_direction[0, 0])
+            
+            # 发送控制命令
             control_client.moveByVelocityAsync(
-                v_cmd[0, 0], v_cmd[1, 0], 0.005, 1, 
-                airsim.DrivetrainType.MaxDegreeOfFreedom, 
-                airsim.YawMode(is_rate=False, yaw_or_rate=np.degrees(yaw))
+                v_cmd_xy[0, 0], v_cmd_xy[1, 0], v_z, 0.05,
+                airsim.DrivetrainType.MaxDegreeOfFreedom,
+                airsim.YawMode(is_rate=False, yaw_or_rate=math.degrees(yaw))
             )
             
-            # 更新位置历史和前一角度
-            pos_reserve = pos
             prev_angle = current_angle
-            
-            # 短暂休眠
-            time.sleep(0.02)
+            time.sleep(0.05)  # 20Hz控制频率
         
-        # 任务完成，返回原点
-        if current_mission_status["success"]:
-            control_client.moveToPositionAsync(0, 0, -5, 10).join()
+        # 绕飞完成后悬停
+        print("绕飞结束，开始悬停...")
+        control_client.hoverAsync().join()
+        time.sleep(1)
         
         # 最后更新任务状态
         current_mission_status["mission_active"] = False
@@ -587,10 +836,11 @@ def execute_fly_around(target_world_coords):
         current_mission_status["mission_active"] = False
         current_mission_status["success"] = False
         current_mission_status["message"] = str(e)
+        print(f"绕飞任务错误: {e}")
         
         # 尝试安全返回
         try:
-            control_client.moveToPositionAsync(0, 0, -5, 10).join()
+            control_client.hoverAsync().join()
         except:
             pass
 
@@ -658,8 +908,7 @@ def create_placeholder_image():
     """创建一个占位图像"""
     placeholder_path = os.path.join(IMAGES_DIR, "placeholder.png")
     if not os.path.exists(placeholder_path):
-        # 创建一个简单的灰色图像，大小为640x480，带有文本
-        img = np.ones((480, 640, 3), dtype=np.uint8) * 100  # 灰色背景
+        img = np.ones((480, 640, 3), dtype=np.uint8) * 100
         cv2.putText(img, "等待相机图像...", (160, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         cv2.imwrite(placeholder_path, img)
         print(f"Created placeholder image at {placeholder_path}")

@@ -3,64 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UE PixStreaming 控制面板</title>
+    <title>智能无人机任务控制系统</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
-            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        html {
+            height: 100%;
+            overflow: hidden;
         }
         
         body {
-            background-color: #f0f0f0;
-            display: flex;
-            flex-direction: column;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
             height: 100vh;
             overflow: hidden;
-        }
-        
-        .header {
-            background-color: #333;
-            color: white;
-            padding: 10px 20px;
             display: flex;
-            justify-content: space-between;
-            align-items: center;
+            flex-direction: column;
         }
         
-        .header h1 {
-            font-size: 20px;
-        }
-        
-        .status-indicator {
+        .main-container {
             display: flex;
-            align-items: center;
-        }
-        
-        .indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background-color: #ff5555;
-            margin-right: 8px;
-        }
-        
-        .indicator.connected {
-            background-color: #55ff55;
-        }
-        
-        .main-content {
-            display: flex;
+            flex-direction: row;
+            height: 100vh;
+            width: 100vw;
             flex: 1;
-            overflow: hidden;
         }
         
-        .pixstream-container {
+        /* 左侧视频流区域 */
+        .video-section {
             flex: 7;
+            background: #000;
             position: relative;
-            background-color: #222;
             overflow: hidden;
+            height: 100vh;
+        }
+        
+        .video-container {
+            width: 100%;
+            height: 100%;
+            position: relative;
         }
         
         #pixstream-frame {
@@ -69,540 +54,1174 @@
             border: none;
         }
         
-        .overlay-message {
+        /* 搜索路径覆盖层 */
+        .search-overlay {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        #search-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .video-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            pointer-events: none;
+            z-index: 20;
+        }
+        
+        .status-card {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-radius: 12px;
             color: white;
-            background-color: rgba(0, 0, 0, 0.7);
-            padding: 20px;
-            border-radius: 10px;
+            pointer-events: auto;
+            font-size: 14px;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4757;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected {
+            background: #2ed573;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .drone-position div {
+            margin-bottom: 4px;
+        }
+        
+        /* 右侧控制面板 */
+        .control-section {
+            flex: 3;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid rgba(255, 255, 255, 0.2);
+            height: 100vh;
+            max-width: 420px;
+            min-width: 350px;
+        }
+        
+        /* 顶部导航标签 */
+        .tab-navigation {
+            display: flex;
+            background: rgba(255, 255, 255, 0.1);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            flex-shrink: 0;
+        }
+        
+        .tab-button {
+            flex: 1;
+            padding: 15px 8px;
+            background: none;
+            border: none;
+            color: #666;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            font-size: 12px;
             text-align: center;
+        }
+        
+        .tab-button.active {
+            color: #2a5298;
+            background: rgba(42, 82, 152, 0.1);
+        }
+        
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: #2a5298;
+            border-radius: 3px 3px 0 0;
+        }
+        
+        .tab-button:hover {
+            background: rgba(42, 82, 152, 0.05);
+        }
+        
+        /* 标签页内容 */
+        .tab-content {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
             display: none;
         }
         
-        .overlay-message.visible {
+        .tab-content.active {
             display: block;
         }
         
-        .control-panel {
-            flex: 3;
-            background-color: white;
-            display: flex;
-            flex-direction: column;
-            padding: 15px;
-            border-left: 1px solid #ddd;
-            max-width: 400px;
-            min-width: 350px;
-            overflow-y: auto;
+        /* 通用卡片样式 */
+        .section-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+            border: 1px solid rgba(42, 82, 152, 0.08);
+            transition: all 0.3s ease;
         }
         
-        .panel-section {
-            margin-bottom: 20px;
+        .section-card:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
         }
         
-        .panel-section h2 {
+        .section-title {
             font-size: 16px;
-            margin-bottom: 10px;
-            padding-bottom: 5px;
-            border-bottom: 1px solid #eee;
+            font-weight: 700;
+            color: #1a202c;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: -0.025em;
         }
         
-        .camera-view {
-            background-color: #333;
-            height: 240px;
+        .section-icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, #2a5298, #1e3c72);
+            border-radius: 6px;
             display: flex;
             align-items: center;
             justify-content: center;
             color: white;
-            margin-bottom: 10px;
-            position: relative;
-            overflow: hidden;
-        }
-        
-        .camera-view img {
-            max-width: 100%;
-            max-height: 100%;
-        }
-        
-        .camera-controls {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .button-container {
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        
-        button {
-            padding: 10px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: background-color 0.2s;
-        }
-        
-        button.primary {
-            background-color: #3498db;
-            color: white;
-        }
-        
-        button.primary:hover {
-            background-color: #2980b9;
-        }
-        
-        button.success {
-            background-color: #2ecc71;
-            color: white;
-        }
-        
-        button.success:hover {
-            background-color: #27ae60;
-        }
-        
-        button.warning {
-            background-color: #f39c12;
-            color: white;
-        }
-        
-        button.warning:hover {
-            background-color: #e67e22;
-        }
-        
-        button.danger {
-            background-color: #e74c3c;
-            color: white;
-        }
-        
-        button.danger:hover {
-            background-color: #c0392b;
-        }
-        
-        button:disabled {
-            background-color: #bdc3c7;
-            cursor: not-allowed;
-        }
-        
-        .drone-status {
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 5px 15px;
-        }
-        
-        .drone-status .label {
-            font-weight: bold;
-            color: #555;
-        }
-        
-        .drone-status .value {
-            color: #333;
-        }
-        
-        .target-status {
-            margin-top: 10px;
-            display: grid;
-            grid-template-columns: auto 1fr;
-            gap: 5px 15px;
-        }
-        
-        .log-container {
-            flex: 1;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            min-height: 150px;
-        }
-        
-        .log-content {
-            flex: 1;
-            background-color: #f7f7f7;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
-            font-family: monospace;
             font-size: 12px;
-            overflow-y: auto;
-            color: #333;
+            box-shadow: 0 2px 8px rgba(42, 82, 152, 0.3);
         }
         
-        .log-entry {
-            margin-bottom: 4px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #eee;
-        }
-        
-        .log-entry .timestamp {
-            color: #888;
-        }
-        
-        .log-entry.info .level {
-            color: #3498db;
-        }
-        
-        .log-entry.success .level {
-            color: #2ecc71;
-        }
-        
-        .log-entry.warning .level {
-            color: #f39c12;
-        }
-        
-        .log-entry.error .level {
-            color: #e74c3c;
-        }
-        
-        .progress-container {
-            height: 20px;
-            background-color: #f3f3f3;
-            border-radius: 10px;
-            margin-top: 5px;
-            overflow: hidden;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background-color: #3498db;
-            width: 0%;
-            transition: width 0.3s;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
+        /* 智能对话区域 */
         .chat-container {
+            height: 200px;
             display: flex;
             flex-direction: column;
-            height: 200px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
         }
         
         .chat-messages {
             flex: 1;
-            background-color: #f7f7f7;
-            border: 1px solid #ddd;
-            border-radius: 4px 4px 0 0;
-            padding: 10px;
+            padding: 12px;
             overflow-y: auto;
-            font-size: 14px;
+            background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+        }
+        
+        .message.user {
+            flex-direction: row-reverse;
+        }
+        
+        .message-bubble {
+            max-width: 85%;
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.4;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #2a5298, #1e3c72);
+            color: white;
+        }
+        
+        .message.system .message-bubble {
+            background: white;
+            color: #374151;
+            border: 1px solid #e5e7eb;
         }
         
         .chat-input-container {
+            padding: 12px;
+            background: white;
+            border-top: 1px solid #e5e7eb;
             display: flex;
-            border: 1px solid #ddd;
-            border-top: none;
-            border-radius: 0 0 4px 4px;
-            overflow: hidden;
+            gap: 10px;
         }
         
         .chat-input {
             flex: 1;
-            padding: 10px;
-            border: none;
+            padding: 10px 14px;
+            border: 2px solid #e5e7eb;
+            border-radius: 20px;
             outline: none;
-            font-size: 14px;
+            font-size: 13px;
+            transition: all 0.3s ease;
         }
         
-        .chat-send {
-            padding: 10px 15px;
-            background-color: #3498db;
+        .chat-input:focus {
+            border-color: #2a5298;
+            box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+        }
+        
+        .send-button {
+            padding: 10px 16px;
+            background: linear-gradient(135deg, #2a5298, #1e3c72);
             color: white;
             border: none;
+            border-radius: 20px;
             cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(42, 82, 152, 0.3);
         }
         
-        .chat-send:hover {
-            background-color: #2980b9;
+        .send-button:hover {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(42, 82, 152, 0.4);
         }
         
-        .user-message {
-            margin-bottom: 8px;
+        /* 控制按钮组 */
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
         }
         
-        .user-message .sender {
-            font-weight: bold;
-            color: #3498db;
+        .control-btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            font-size: 13px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
         
-        .system-message {
-            margin-bottom: 8px;
-            color: #555;
+        .control-btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
         
-        .system-message .sender {
-            font-weight: bold;
-            color: #e67e22;
+        .btn-primary {
+            background: linear-gradient(135deg, #2a5298, #1e3c72);
+            color: white;
         }
         
-        .match-info-container {
-            background-color: #f7f7f7;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 10px;
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+        
+        .control-btn:disabled {
+            background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+            color: #94a3b8;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        .control-btn:disabled:hover {
+            transform: none;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 搜索参数配置 */
+        .search-config {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        
+        .input-group label {
+            font-size: 13px;
+            color: #374151;
+            font-weight: 600;
+        }
+        
+        .input-group input, .input-group select {
+            padding: 10px 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 6px;
+            font-size: 13px;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+        
+        .input-group input:focus, .input-group select:focus {
+            border-color: #2a5298;
+            box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+        }
+        
+        /* 相机预览 */
+        .camera-preview {
+            width: 100%;
+            height: 160px;
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 10px;
+            border: 2px dashed #cbd5e1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #64748b;
+            font-size: 13px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .camera-preview:hover {
+            border-color: #2a5298;
+            background: linear-gradient(135deg, #f0f4ff, #e0f2fe);
+        }
+        
+        .camera-preview img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+        
+        .camera-preview #match-placeholder {
+            color: #94a3b8;
+            font-size: 13px;
+            text-align: center;
+        }
+        
+        /* 按钮控制组 */
+        .button-row {
+            display: flex;
+            gap: 8px;
             margin-top: 10px;
+        }
+        
+        .button-row .control-btn {
+            flex: 1;
+            font-size: 12px;
+            padding: 10px 12px;
+        }
+        
+        /* 进度条 */
+        .progress-section {
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 10px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #374151;
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 6px;
+            background: #e2e8f0;
+            border-radius: 3px;
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #2a5298, #1e3c72);
+            width: 0%;
+            transition: width 0.5s ease;
+            border-radius: 3px;
+        }
+        
+        .progress-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* 检测结果 */
+        .detection-results {
+            display: grid;
+            gap: 8px;
+        }
+        
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 14px;
+            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            border-radius: 8px;
+            font-size: 13px;
+            border: 1px solid #e2e8f0;
+            transition: all 0.3s ease;
+        }
+        
+        .result-item:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+            border-color: #cbd5e1;
+        }
+        
+        .result-label {
+            font-weight: 600;
+            color: #374151;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+        }
+        
+        .result-value {
+            font-weight: 700;
+            color: #1f2937;
+            background: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            border: 1px solid #e5e7eb;
+            min-width: 60px;
+            text-align: center;
+            font-size: 12px;
+        }
+        
+        .result-value:empty::after {
+            content: "-";
+            color: #9ca3af;
+        }
+        
+        /* 日志样式 */
+        .logs-container {
+            background: #1a1a1a;
+            border-radius: 10px;
+            height: calc(100vh - 140px);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .logs-header {
+            padding: 10px 14px;
+            background: #2d2d2d;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .logs-title {
+            color: #fff;
+            font-weight: 600;
             font-size: 13px;
         }
         
-        .match-info {
-            margin-bottom: 5px;
+        .clear-logs-btn {
+            padding: 4px 8px;
+            background: #404040;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
         }
         
-        .match-info-label {
-            font-weight: bold;
-            color: #555;
+        .logs-content {
+            flex: 1;
+            padding: 10px 14px;
+            overflow-y: auto;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            line-height: 1.4;
+            color: #e0e0e0;
         }
         
-        .key-info {
-            font-weight: bold;
-            color: #e74c3c;
+        .log-entry {
+            margin-bottom: 4px;
+            display: flex;
+            gap: 8px;
         }
         
-        @media (max-width: 1024px) {
-            .main-content {
+        .log-timestamp {
+            color: #888;
+            min-width: 60px;
+        }
+        
+        .log-level {
+            min-width: 45px;
+            font-weight: 600;
+        }
+        
+        .log-level.info { color: #4fc3f7; }
+        .log-level.success { color: #66bb6a; }
+        .log-level.warning { color: #ffb74d; }
+        .log-level.error { color: #f44336; }
+        
+        .log-message {
+            flex: 1;
+            color: #e0e0e0;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 1200px) {
+            .control-buttons {
+                grid-template-columns: 1fr;
+            }
+            
+            .search-config {
+                grid-template-columns: 1fr;
+            }
+            
+            .control-section {
+                min-width: 320px;
+                max-width: 380px;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .main-container {
                 flex-direction: column;
             }
             
-            .pixstream-container {
-                flex: 1;
+            .video-section {
+                flex: 0 0 60%;
             }
             
-            .control-panel {
+            .control-section {
+                flex: 0 0 40%;
+                min-width: auto;
                 max-width: none;
-                height: 500px;
-                overflow-y: auto;
+            }
+        }
+        
+        /* 确保桌面端始终保持左右布局 */
+        @media (min-width: 769px) {
+            .main-container {
+                flex-direction: row !important;
+            }
+            
+            .video-section {
+                flex: 0 0 70% !important;
+                height: 100vh !important;
+            }
+            
+            .control-section {
+                flex: 0 0 30% !important;
+                height: 100vh !important;
+                max-width: 420px;
+                min-width: 350px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>UE PixStreaming 控制面板</h1>
-        <div class="status-indicator">
-            <div id="connection-indicator" class="indicator"></div>
-            <span id="connection-status">未连接</span>
-        </div>
-    </div>
-    
-    <div class="main-content">
-        <div class="pixstream-container">
-            <iframe id="pixstream-frame" src="http://localhost:80/" allowfullscreen></iframe>
-            <div id="overlay-message" class="overlay-message">
-                正在连接到PixStreaming服务器...
+    <div class="main-container">
+        <!-- 左侧视频流区域 -->
+        <div class="video-section">
+            <div class="video-container">
+                <iframe id="pixstream-frame" src="http://localhost:80/" allowfullscreen></iframe>
+                
+                <!-- 搜索路径覆盖层 -->
+                <div class="search-overlay">
+                    <canvas id="search-canvas"></canvas>
+                </div>
+                
+                <div class="video-overlay">
+                    <div class="status-card">
+                        <div class="connection-status">
+                            <div id="connection-dot" class="status-dot"></div>
+                            <span id="connection-text">未连接</span>
+                        </div>
+                    </div>
+                    
+                    <div class="status-card">
+                        <div class="drone-position">
+                            <div>X: <span id="pos-x">0.00</span></div>
+                            <div>Y: <span id="pos-y">0.00</span></div>
+                            <div>Z: <span id="pos-z">0.00</span></div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
         
-        <div class="control-panel">
-            <div class="panel-section">
-                <h2>无人机相机</h2>
-                <div class="camera-view">
-                    <img id="camera-feed" src="/static/images/placeholder.png" alt="无人机相机画面" />
-                </div>
-                <div class="camera-controls">
-                    <button id="capture-btn" class="primary">捕获图像</button>
-                </div>
+        <!-- 右侧控制面板 -->
+        <div class="control-section">
+            <!-- 导航标签 -->
+            <div class="tab-navigation">
+                <button class="tab-button active" data-tab="planning">🎯 任务规划</button>
+                <button class="tab-button" data-tab="execution">🚁 执行监控</button>
+                <button class="tab-button" data-tab="logs">📋 系统日志</button>
             </div>
             
-            <div class="panel-section">
-                <h2>无人机状态</h2>
-                <div class="drone-status">
-                    <div class="label">X 位置:</div>
-                    <div class="value" id="pos-x">0.00</div>
-                    
-                    <div class="label">Y 位置:</div>
-                    <div class="value" id="pos-y">0.00</div>
-                    
-                    <div class="label">Z 位置:</div>
-                    <div class="value" id="pos-z">0.00</div>
-                </div>
-                
-                <div id="mission-progress-container" class="progress-container hidden">
-                    <div id="mission-progress-bar" class="progress-bar"></div>
-                </div>
-            </div>
-            
-            <div class="panel-section">
-                <h2>目标检测结果</h2>
-                <div id="target-status" class="target-status hidden">
-                    <div class="label">目标类型:</div>
-                    <div class="value" id="target-type">未检测</div>
-                    
-                    <div class="label">目标位置:</div>
-                    <div class="value" id="target-position">未知</div>
-                </div>
-                
-                <div id="match-info-container" class="match-info-container hidden">
-                    <div class="match-info">
-                        <span class="match-info-label">匹配特征点数:</span>
-                        <span id="match-count">0</span>
+            <!-- 任务规划页面 -->
+            <div class="tab-content active" id="planning-tab">
+                <!-- 智能对话区域 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">💬</div>
+                        智能指令对话
                     </div>
-                    <div class="match-info">
-                        <span class="match-info-label">选择特征点ID:</span>
-                        <span id="selected-keypoint">-</span>
-                    </div>
-                    <div class="match-info">
-                        <span class="match-info-label">计算视差值:</span>
-                        <span id="disparity-value">-</span>
-                    </div>
-                    <div class="match-info">
-                        <span class="match-info-label">计算深度:</span>
-                        <span id="depth-value">-</span>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="panel-section">
-                <h2>任务控制</h2>
-                <div class="button-container">
-                    <button id="connect-btn" class="primary">连接到 AirSim</button>
-                    <button id="takeoff-btn" class="success" disabled>起飞</button>
-                    <button id="land-btn" class="warning" disabled>降落</button>
-                    <button id="detect-btn" class="primary" disabled>检测目标</button>
-                    <button id="flyaround-btn" class="success" disabled>绕飞目标</button>
-                </div>
-            </div>
-            
-            <div class="panel-section">
-                <h2>指令对话</h2>
-                <div class="chat-container">
-                    <div id="chat-messages" class="chat-messages">
-                        <div class="system-message">
-                            <span class="sender">系统:</span>
-                            <span class="message">欢迎使用目标检测与绕飞系统，您可以通过输入指令来控制系统。例如: "检测船只"</span>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="message system">
+                                <div class="message-bubble">
+                                    欢迎使用智能无人机系统！您可以输入指令，例如："在海域搜索航母目标"
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-container">
+                            <input type="text" class="chat-input" id="chat-input" placeholder="输入任务指令...">
+                            <button class="send-button" id="send-button">发送</button>
                         </div>
                     </div>
-                    <div class="chat-input-container">
-                        <input id="chat-input" class="chat-input" type="text" placeholder="输入指令..." />
-                        <button id="chat-send" class="chat-send">发送</button>
+                </div>
+                
+                <!-- 搜索参数配置 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">🔍</div>
+                        搜索参数配置
+                    </div>
+                    <div class="search-config">
+                        <div class="input-group">
+                            <label>搜索区域大小 (m)</label>
+                            <input type="number" id="search-area" value="1000" min="100" max="5000">
+                        </div>
+                        <div class="input-group">
+                            <label>网格间距 (m)</label>
+                            <input type="number" id="grid-spacing" value="100" min="50" max="500">
+                        </div>
+                        <div class="input-group">
+                            <label>搜索高度 (m)</label>
+                            <input type="number" id="search-altitude" value="20" min="10" max="50">
+                        </div>
+                        <div class="input-group">
+                            <label>目标类型</label>
+                            <select id="target-type-select">
+                                <option value="">自动识别</option>
+                                <option value="aircraft carrier">航空母舰</option>
+                                <option value="warship">军舰</option>
+                                <option value="submarine">潜艇</option>
+                                <option value="boat">船只</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 任务控制区域 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">🎮</div>
+                        任务控制
+                    </div>
+                    <div class="control-buttons">
+                        <button class="control-btn btn-primary" id="connect-btn">
+                            🔗 连接系统
+                        </button>
+                        <button class="control-btn btn-success" id="takeoff-btn" disabled>
+                            🚀 起飞
+                        </button>
+                        <button class="control-btn btn-warning" id="search-btn" disabled>
+                            🔍 网格搜索
+                        </button>
+                        <button class="control-btn btn-primary" id="detect-btn" disabled>
+                            🎯 精确定位
+                        </button>
+                        <button class="control-btn btn-success" id="flyaround-btn" disabled>
+                            🔄 绕飞目标
+                        </button>
+                        <button class="control-btn btn-danger" id="land-btn" disabled>
+                            🛬 降落
+                        </button>
                     </div>
                 </div>
             </div>
             
-            <div class="panel-section log-container">
-                <h2>任务日志</h2>
-                <div id="log-content" class="log-content">
-                    <!-- 日志内容会动态添加 -->
+            <!-- 执行监控页面 -->
+            <div class="tab-content" id="execution-tab">
+                <!-- 相机预览与检测结果 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">📷</div>
+                        实时画面与检测结果
+                    </div>
+                    <div class="camera-preview">
+                        <img id="camera-feed" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjhmOWZhIi8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJBcmlhbCwgc2Fucy1zZXJpZiIgZm9udC1zaXplPSIxNCIgZmlsbD0iIzlhYTBhNiIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZHk9Ii4zZW0iPuetiemYlueJueacuuWbvumHjzwvdGV4dD48L3N2Zz4=" alt="等待图像">
+                    </div>
+                    <div class="button-row">
+                        <button class="control-btn btn-primary" id="capture-btn">
+                            📸 捕获图像
+                        </button>
+                        <button class="control-btn btn-success" id="show-qwen-result-btn" disabled>
+                            🎯 查看Qwen检测
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 任务执行进度 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">📊</div>
+                        任务执行进度
+                    </div>
+                    <div class="progress-section">
+                        <div class="progress-header">
+                            <span>当前任务：<span id="current-task">待机中</span></span>
+                            <span id="progress-percentage">0%</span>
+                        </div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" id="progress-bar"></div>
+                        </div>
+                        <div class="progress-info">
+                            <span>搜索覆盖率: <span id="search-coverage" style="font-weight: 600; color: #1f2937;">0%</span></span>
+                            <span>完成点数: <span id="completed-points">0/0</span></span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 目标检测与定位结果 -->
+                <div class="section-card">
+                    <div class="section-title">
+                        <div class="section-icon">🎯</div>
+                        目标检测与定位结果
+                    </div>
+                    <div class="detection-results">
+                        <div class="result-item">
+                            <span class="result-label">🎯 目标类型</span>
+                            <span class="result-value" id="target-type">未检测</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">🔗 特征点匹配</span>
+                            <span class="result-value" id="match-count">0 个</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">📏 计算深度</span>
+                            <span class="result-value" id="depth-value">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">📐 视差值</span>
+                            <span class="result-value" id="disparity-value">-</span>
+                        </div>
+                        <div class="result-item">
+                            <span class="result-label">📍 目标坐标</span>
+                            <span class="result-value" id="target-coordinates">未定位</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 特征匹配结果显示 -->
+                <div class="section-card" id="match-results-card" style="display: none;">
+                    <div class="section-title">
+                        <div class="section-icon">🔍</div>
+                        特征匹配结果
+                    </div>
+                    <div class="camera-preview" style="height: 140px;">
+                        <img id="match-result-image" alt="特征匹配结果图" style="display: none;">
+                        <div id="match-placeholder">特征匹配结果将在此显示</div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 系统日志页面 -->
+            <div class="tab-content" id="logs-tab">
+                <div class="logs-container">
+                    <div class="logs-header">
+                        <div class="logs-title">系统运行日志</div>
+                        <button class="clear-logs-btn" id="clear-logs">清除日志</button>
+                    </div>
+                    <div class="logs-content" id="logs-content">
+                        <div class="log-entry">
+                            <span class="log-timestamp">14:30:25</span>
+                            <span class="log-level info">INFO</span>
+                            <span class="log-message">系统初始化完成</span>
+                        </div>
+                        <div class="log-entry">
+                            <span class="log-timestamp">14:30:26</span>
+                            <span class="log-level info">INFO</span>
+                            <span class="log-message">等待用户连接...</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
     
     <script>
-        // DOM元素
-        const pixstreamFrame = document.getElementById('pixstream-frame');
-        const overlayMessage = document.getElementById('overlay-message');
-        const connectionIndicator = document.getElementById('connection-indicator');
-        const connectionStatus = document.getElementById('connection-status');
-        const cameraFeed = document.getElementById('camera-feed');
-        const captureBtn = document.getElementById('capture-btn');
-        const connectBtn = document.getElementById('connect-btn');
-        const takeoffBtn = document.getElementById('takeoff-btn');
-        const landBtn = document.getElementById('land-btn');
-        const detectBtn = document.getElementById('detect-btn');
-        const flyaroundBtn = document.getElementById('flyaround-btn');
-        const logContent = document.getElementById('log-content');
-        const missionProgressContainer = document.getElementById('mission-progress-container');
-        const missionProgressBar = document.getElementById('mission-progress-bar');
-        const chatInput = document.getElementById('chat-input');
-        const chatSend = document.getElementById('chat-send');
-        const chatMessages = document.getElementById('chat-messages');
-        
-        // 检测结果元素
-        const targetStatus = document.getElementById('target-status');
-        const targetType = document.getElementById('target-type');
-        const targetPosition = document.getElementById('target-position');
-        const matchInfoContainer = document.getElementById('match-info-container');
-        const matchCount = document.getElementById('match-count');
-        const selectedKeypoint = document.getElementById('selected-keypoint');
-        const disparityValue = document.getElementById('disparity-value');
-        const depthValue = document.getElementById('depth-value');
-        
-        // 位置显示元素
-        const posX = document.getElementById('pos-x');
-        const posY = document.getElementById('pos-y');
-        const posZ = document.getElementById('pos-z');
-        
-        // API基础URL
+        // 全局变量
         const API_BASE_URL = 'http://localhost:5000/api';
+        let currentMission = null;
+        let searchCanvas = null;
+        let searchCtx = null;
+        let searchPath = [];
+        let currentSearchIndex = 0;
         
-        // PixStreaming状态
-        let pixstreamConnected = false;
-        let targetDetected = false;
-        let cameraUpdateInterval = null;
-        
-        // 检查PixStreaming连接状态
-        function checkPixStreamConnection() {
-            try {
-                const frameWindow = pixstreamFrame.contentWindow;
-                // 尝试访问iframe内容，如果成功则表示连接已建立
-                if (frameWindow && frameWindow.document) {
-                    pixstreamConnected = true;
-                    connectionIndicator.classList.add('connected');
-                    connectionStatus.textContent = '已连接';
-                    overlayMessage.classList.remove('visible');
-                    return true;
-                }
-            } catch (e) {
-                // 如果出现跨域错误，可能表示连接已建立但无法访问内容
-                pixstreamConnected = true;
-                connectionIndicator.classList.add('connected');
-                connectionStatus.textContent = '已连接';
-                overlayMessage.classList.remove('visible');
-                return true;
+        // 初始化Canvas
+        function initSearchCanvas() {
+            searchCanvas = document.getElementById('search-canvas');
+            searchCtx = searchCanvas.getContext('2d');
+            
+            function resizeCanvas() {
+                const videoContainer = document.querySelector('.video-container');
+                searchCanvas.width = videoContainer.clientWidth;
+                searchCanvas.height = videoContainer.clientHeight;
+                drawSearchPath();
             }
             
-            pixstreamConnected = false;
-            connectionIndicator.classList.remove('connected');
-            connectionStatus.textContent = '未连接';
-            overlayMessage.classList.add('visible');
-            return false;
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
         }
         
-        // 初始化时显示连接中消息
-        overlayMessage.classList.add('visible');
-        
-        // 添加日志条目
-        function addLogEntry(message, level = 'info') {
-            const timestamp = new Date().toLocaleTimeString();
-            const logEntry = document.createElement('div');
-            logEntry.className = `log-entry ${level}`;
-            logEntry.innerHTML = `
-                <span class="timestamp">[${timestamp}]</span>
-                <span class="level">[${level.toUpperCase()}]</span>
-                <span class="message">${message}</span>
-            `;
-            logContent.appendChild(logEntry);
-            logContent.scrollTop = logContent.scrollHeight;
+        // 绘制搜索路径
+        function drawSearchPath() {
+            if (!searchCtx || searchPath.length === 0) return;
+            
+            searchCtx.clearRect(0, 0, searchCanvas.width, searchCanvas.height);
+            
+            // 绘制网格
+            searchCtx.strokeStyle = 'rgba(42, 82, 152, 0.3)';
+            searchCtx.lineWidth = 1;
+            
+            const gridSize = 50; // 屏幕像素间距
+            for (let x = 0; x < searchCanvas.width; x += gridSize) {
+                searchCtx.beginPath();
+                searchCtx.moveTo(x, 0);
+                searchCtx.lineTo(x, searchCanvas.height);
+                searchCtx.stroke();
+            }
+            
+            for (let y = 0; y < searchCanvas.height; y += gridSize) {
+                searchCtx.beginPath();
+                searchCtx.moveTo(0, y);
+                searchCtx.lineTo(searchCanvas.width, y);
+                searchCtx.stroke();
+            }
+            
+            // 绘制搜索路径
+            if (searchPath.length > 1) {
+                searchCtx.strokeStyle = '#2a5298';
+                searchCtx.lineWidth = 3;
+                searchCtx.beginPath();
+                
+                for (let i = 0; i < searchPath.length; i++) {
+                    const point = screenCoordinate(searchPath[i]);
+                    if (i === 0) {
+                        searchCtx.moveTo(point.x, point.y);
+                    } else {
+                        searchCtx.lineTo(point.x, point.y);
+                    }
+                }
+                searchCtx.stroke();
+                
+                // 绘制已完成的路径点
+                for (let i = 0; i < currentSearchIndex; i++) {
+                    const point = screenCoordinate(searchPath[i]);
+                    searchCtx.fillStyle = '#2ed573';
+                    searchCtx.beginPath();
+                    searchCtx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
+                    searchCtx.fill();
+                }
+                
+                // 绘制当前位置
+                if (currentSearchIndex < searchPath.length) {
+                    const currentPoint = screenCoordinate(searchPath[currentSearchIndex]);
+                    searchCtx.fillStyle = '#ff4757';
+                    searchCtx.beginPath();
+                    searchCtx.arc(currentPoint.x, currentPoint.y, 8, 0, 2 * Math.PI);
+                    searchCtx.fill();
+                }
+            }
         }
         
-        // 添加聊天消息
-        function addChatMessage(message, sender = 'user') {
-            const messageElement = document.createElement('div');
-            messageElement.className = sender === 'user' ? 'user-message' : 'system-message';
-            messageElement.innerHTML = `
-                <span class="sender">${sender === 'user' ? '用户:' : '系统:'}</span>
-                <span class="message">${message}</span>
-            `;
-            chatMessages.appendChild(messageElement);
+        // 将世界坐标转换为屏幕坐标（简化版）
+        function screenCoordinate(worldPos) {
+            // 这里是简化的转换，实际应该根据相机视角和无人机位置计算
+            const centerX = searchCanvas.width / 2;
+            const centerY = searchCanvas.height / 2;
+            const scale = 0.1; // 缩放因子
+            
+            return {
+                x: centerX + worldPos.x * scale,
+                y: centerY + worldPos.y * scale
+            };
+        }
+        
+        // 生成网格搜索路径
+        function generateGridSearchPath() {
+            const area = parseInt(document.getElementById('search-area').value);
+            const spacing = parseInt(document.getElementById('grid-spacing').value);
+            const altitude = parseInt(document.getElementById('search-altitude').value);
+            
+            searchPath = [];
+            const gridPoints = Math.floor(area / spacing);
+            const startX = -area / 2;
+            const startY = -area / 2;
+            
+            // S型搜索路径
+            for (let row = 0; row <= gridPoints; row++) {
+                const y = startY + row * spacing;
+                
+                if (row % 2 === 0) {
+                    // 从左到右
+                    for (let col = 0; col <= gridPoints; col++) {
+                        const x = startX + col * spacing;
+                        searchPath.push({ x, y, z: -altitude });
+                    }
+                } else {
+                    // 从右到左
+                    for (let col = gridPoints; col >= 0; col--) {
+                        const x = startX + col * spacing;
+                        searchPath.push({ x, y, z: -altitude });
+                    }
+                }
+            }
+            
+            currentSearchIndex = 0;
+            addLog(`生成搜索路径: ${searchPath.length} 个点`, 'info');
+            drawSearchPath();
+        }
+        
+        // 标签页切换
+        document.querySelectorAll('.tab-button').forEach(button => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                button.classList.add('active');
+                document.getElementById(button.dataset.tab + '-tab').classList.add('active');
+            });
+        });
+        
+        // 聊天功能
+        const chatInput = document.getElementById('chat-input');
+        const sendButton = document.getElementById('send-button');
+        const chatMessages = document.getElementById('chat-messages');
+        
+        function addMessage(text, isUser = true) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user' : 'system'}`;
+            messageDiv.innerHTML = `<div class="message-bubble">${text}</div>`;
+            chatMessages.appendChild(messageDiv);
             chatMessages.scrollTop = chatMessages.scrollHeight;
         }
         
-        // 更新任务进度
-        function updateMissionProgress(progress) {
-            if (progress > 0) {
-                missionProgressContainer.classList.remove('hidden');
-                missionProgressBar.style.width = `${progress}%`;
+        function sendMessage() {
+            const text = chatInput.value.trim();
+            if (text) {
+                addMessage(text, true);
+                chatInput.value = '';
+                processCommand(text);
+            }
+        }
+        
+        sendButton.addEventListener('click', sendMessage);
+        chatInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+        
+        // 处理用户指令
+        function processCommand(command) {
+            const lowerCommand = command.toLowerCase();
+            
+            // 检测和绕飞组合指令
+            if ((lowerCommand.includes('检测') || lowerCommand.includes('detect')) && 
+                (lowerCommand.includes('绕飞') || lowerCommand.includes('fly around'))) {
+                
+                // 提取目标类型
+                let targetType = '';
+                if (lowerCommand.includes('航母') || lowerCommand.includes('aircraft carrier')) {
+                    targetType = 'aircraft carrier';
+                    document.getElementById('target-type-select').value = 'aircraft carrier';
+                } else if (lowerCommand.includes('军舰') || lowerCommand.includes('warship')) {
+                    targetType = 'warship';
+                    document.getElementById('target-type-select').value = 'warship';
+                } else if (lowerCommand.includes('潜艇') || lowerCommand.includes('submarine')) {
+                    targetType = 'submarine';
+                    document.getElementById('target-type-select').value = 'submarine';
+                }
+                
+                addMessage(`开始执行检测${targetType ? targetType : '目标'}并绕飞任务`, false);
+                
+                // 自动执行检测，然后绕飞
+                setTimeout(() => {
+                    detectTarget().then((result) => {
+                        if (result && result.success) {
+                            addMessage('目标检测成功，开始绕飞...', false);
+                            setTimeout(() => {
+                                flyAroundTarget();
+                            }, 2000);
+                        }
+                    });
+                }, 1000);
+                
+                return;
+            }
+            
+            // 单独的搜索指令
+            if (lowerCommand.includes('搜索') || lowerCommand.includes('search')) {
+                if (lowerCommand.includes('航母') || lowerCommand.includes('aircraft carrier')) {
+                    document.getElementById('target-type-select').value = 'aircraft carrier';
+                } else if (lowerCommand.includes('军舰') || lowerCommand.includes('warship')) {
+                    document.getElementById('target-type-select').value = 'warship';
+                } else if (lowerCommand.includes('潜艇') || lowerCommand.includes('submarine')) {
+                    document.getElementById('target-type-select').value = 'submarine';
+                }
+                
+                addMessage('已配置搜索参数，开始网格搜索...', false);
+                setTimeout(() => startGridSearch(), 1000);
+                return;
+            }
+            
+            // 单独的检测指令
+            if (lowerCommand.includes('检测') || lowerCommand.includes('detect')) {
+                let targetType = '';
+                if (lowerCommand.includes('航母')) targetType = 'aircraft carrier';
+                else if (lowerCommand.includes('军舰')) targetType = 'warship';
+                else if (lowerCommand.includes('潜艇')) targetType = 'submarine';
+                
+                if (targetType) {
+                    document.getElementById('target-type-select').value = targetType;
+                }
+                
+                addMessage('开始执行目标检测...', false);
+                setTimeout(() => detectTarget(), 1000);
+                return;
+            }
+            
+            // 其他基础指令
+            if (lowerCommand.includes('连接') || lowerCommand.includes('connect')) {
+                connectToAirSim();
+            } else if (lowerCommand.includes('起飞') || lowerCommand.includes('takeoff')) {
+                takeoff();
+            } else if (lowerCommand.includes('绕飞') || lowerCommand.includes('fly around')) {
+                flyAroundTarget();
+            } else if (lowerCommand.includes('降落') || lowerCommand.includes('land')) {
+                land();
             } else {
-                missionProgressContainer.classList.add('hidden');
+                addMessage('指令已接收。可用指令示例：\n• "检测航母并绕飞"\n• "搜索军舰目标"\n• "连接系统"\n• "起飞"', false);
+            }
+        }
+        
+        // 添加日志功能
+        function addLog(message, level = 'info') {
+            const logsContent = document.getElementById('logs-content');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.className = 'log-entry';
+            logEntry.innerHTML = `
+                <span class="log-timestamp">${timestamp}</span>
+                <span class="log-level ${level}">${level.toUpperCase()}</span>
+                <span class="log-message">${message}</span>
+            `;
+            logsContent.appendChild(logEntry);
+            logsContent.scrollTop = logsContent.scrollHeight;
+        }
+        
+        // 更新进度
+        function updateProgress(percentage, task = '执行中') {
+            document.getElementById('progress-bar').style.width = percentage + '%';
+            document.getElementById('progress-percentage').textContent = percentage + '%';
+            document.getElementById('current-task').textContent = task;
+        }
+        
+        // 更新搜索覆盖率
+        function updateSearchCoverage(coverage) {
+            document.getElementById('search-coverage').textContent = coverage + '%';
+        }
+        
+        // 更新完成点数
+        function updateCompletedPoints(completed, total) {
+            document.getElementById('completed-points').textContent = `${completed}/${total}`;
+        }
+        
+        // 查看Qwen检测结果
+        async function showQwenResult() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/get_qwen_result`);
+                const data = await response.json();
+                
+                if (data.success && data.image_url) {
+                    document.getElementById('camera-feed').src = data.image_url + '?t=' + new Date().getTime();
+                    addLog('已显示Qwen检测结果', 'info');
+                } else {
+                    addLog('暂无Qwen检测结果', 'warning');
+                }
+            } catch (error) {
+                addLog(`获取Qwen结果错误: ${error.message}`, 'error');
             }
         }
         
         // 连接到AirSim
         async function connectToAirSim() {
             try {
-                addLogEntry('正在连接到AirSim...');
+                addLog('正在连接到AirSim...', 'info');
+                updateProgress(10, '连接中');
+                
                 const response = await fetch(`${API_BASE_URL}/connect`, {
                     method: 'POST'
                 });
@@ -610,60 +1229,34 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLogEntry('成功连接到AirSim!', 'success');
-                    addChatMessage('已成功连接到AirSim', 'system');
-                    // 启用相关按钮
-                    takeoffBtn.disabled = false;
-                    connectBtn.disabled = true;
+                    addLog('成功连接到AirSim!', 'success');
+                    addMessage('已成功连接到AirSim系统', false);
                     
-                    // 启动定时相机更新
-                    startCameraUpdates();
+                    document.getElementById('connection-dot').classList.add('connected');
+                    document.getElementById('connection-text').textContent = '已连接';
+                    document.getElementById('takeoff-btn').disabled = false;
+                    document.getElementById('connect-btn').disabled = true;
+                    
+                    updateProgress(100, '连接完成');
+                    setTimeout(() => updateProgress(0, '待机中'), 2000);
+                    
+                    startStatusPolling();
                 } else {
-                    addLogEntry(`连接失败: ${data.message}`, 'error');
-                    addChatMessage(`连接失败: ${data.message}`, 'system');
+                    addLog(`连接失败: ${data.message}`, 'error');
+                    addMessage(`连接失败: ${data.message}`, false);
                 }
             } catch (error) {
-                addLogEntry(`连接请求错误: ${error.message}`, 'error');
-                addChatMessage('连接请求失败，请检查API服务器是否运行', 'system');
+                addLog(`连接请求错误: ${error.message}`, 'error');
+                addMessage('连接请求失败，请检查API服务器是否运行', false);
             }
         }
         
-        // 启动定时相机更新
-        function startCameraUpdates() {
-            if (cameraUpdateInterval) {
-                clearInterval(cameraUpdateInterval);
-            }
-            
-            // 每5秒更新一次相机画面
-            cameraUpdateInterval = setInterval(async () => {
-                try {
-                    const response = await fetch(`${API_BASE_URL}/capture_image`, {
-                        method: 'POST'
-                    });
-                    
-                    const data = await response.json();
-                    
-                    if (data.success && data.image_url) {
-                        cameraFeed.src = `${data.image_url}?t=${new Date().getTime()}`;
-                    }
-                } catch (error) {
-                    console.error('获取相机图像错误:', error);
-                }
-            }, 5000);
-        }
-        
-        // 停止定时相机更新
-        function stopCameraUpdates() {
-            if (cameraUpdateInterval) {
-                clearInterval(cameraUpdateInterval);
-                cameraUpdateInterval = null;
-            }
-        }
-        
-        // 无人机起飞
+        // 起飞
         async function takeoff() {
             try {
-                addLogEntry('正在起飞...');
+                addLog('正在起飞...', 'info');
+                updateProgress(20, '起飞中');
+                
                 const response = await fetch(`${API_BASE_URL}/takeoff`, {
                     method: 'POST'
                 });
@@ -671,147 +1264,236 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLogEntry('起飞成功!', 'success');
-                    addChatMessage('无人机已成功起飞', 'system');
-                    // 启用相关按钮
-                    takeoffBtn.disabled = true;
-                    landBtn.disabled = false;
-                    detectBtn.disabled = false;
+                    addLog('起飞成功!', 'success');
+                    addMessage('无人机已成功起飞，准备执行任务', false);
+                    
+                    document.getElementById('takeoff-btn').disabled = true;
+                    document.getElementById('land-btn').disabled = false;
+                    document.getElementById('search-btn').disabled = false;
+                    document.getElementById('detect-btn').disabled = false;
+                    
+                    updateProgress(100, '起飞完成');
+                    setTimeout(() => updateProgress(0, '待命中'), 2000);
                 } else {
-                    addLogEntry(`起飞失败: ${data.message}`, 'error');
-                    addChatMessage(`起飞失败: ${data.message}`, 'system');
+                    addLog(`起飞失败: ${data.message}`, 'error');
+                    addMessage(`起飞失败: ${data.message}`, false);
                 }
             } catch (error) {
-                addLogEntry(`起飞请求错误: ${error.message}`, 'error');
-                addChatMessage('起飞请求失败', 'system');
+                addLog(`起飞请求错误: ${error.message}`, 'error');
+                addMessage('起飞请求失败', false);
             }
         }
         
-        // 无人机降落
-        async function land() {
+        // 网格搜索
+        async function startGridSearch() {
             try {
-                addLogEntry('正在降落...');
-                const response = await fetch(`${API_BASE_URL}/land`, {
-                    method: 'POST'
+                generateGridSearchPath();
+                
+                addLog('开始网格搜索任务...', 'info');
+                updateProgress(5, '搜索准备中');
+                
+                const targetType = document.getElementById('target-type-select').value;
+                const searchParams = {
+                    area: parseInt(document.getElementById('search-area').value),
+                    spacing: parseInt(document.getElementById('grid-spacing').value),
+                    altitude: parseInt(document.getElementById('search-altitude').value),
+                    target_type: targetType
+                };
+                
+                document.getElementById('search-btn').disabled = true;
+                
+                const response = await fetch(`${API_BASE_URL}/start_grid_search`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(searchParams)
                 });
                 
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLogEntry('降落成功!', 'success');
-                    addChatMessage('无人机已成功降落', 'system');
-                    // 更新按钮状态
-                    landBtn.disabled = true;
-                    takeoffBtn.disabled = false;
-                    detectBtn.disabled = true;
-                    flyaroundBtn.disabled = true;
-                    targetDetected = false;
-                    updateMissionProgress(0);
+                    addLog('网格搜索已启动', 'success');
+                    addMessage('开始执行网格搜索任务', false);
+                    updateProgress(10, '搜索中');
                     
-                    // 隐藏目标状态
-                    targetStatus.classList.add('hidden');
-                    matchInfoContainer.classList.add('hidden');
+                    // 开始搜索进度监控
+                    pollSearchProgress();
                 } else {
-                    addLogEntry(`降落失败: ${data.message}`, 'error');
-                    addChatMessage(`降落失败: ${data.message}`, 'system');
+                    addLog(`搜索启动失败: ${data.message}`, 'error');
+                    addMessage(`搜索启动失败: ${data.message}`, false);
+                    document.getElementById('search-btn').disabled = false;
                 }
             } catch (error) {
-                addLogEntry(`降落请求错误: ${error.message}`, 'error');
-                addChatMessage('降落请求失败', 'system');
+                addLog(`搜索请求错误: ${error.message}`, 'error');
+                addMessage('搜索请求失败', false);
+                document.getElementById('search-btn').disabled = false;
             }
         }
         
-        // 检测目标
-        async function detectTarget(targetType = '') {
+        // 监控搜索进度
+        async function pollSearchProgress() {
+            const progressInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/search_status`);
+                    const data = await response.json();
+                    
+                    if (data.search_active) {
+                        updateProgress(data.progress, '网格搜索中');
+                        updateSearchCoverage(data.coverage || 0);
+                        updateCompletedPoints(data.current_index || 0, data.total_points || searchPath.length);
+                        
+                        // 更新当前搜索位置
+                        if (data.current_position) {
+                            currentSearchIndex = data.current_index || 0;
+                            drawSearchPath();
+                        }
+                        
+                        // 如果发现目标
+                        if (data.target_found) {
+                            clearInterval(progressInterval);
+                            addLog('搜索中发现目标!', 'success');
+                            addMessage('已发现目标，准备精确定位', false);
+                            
+                            document.getElementById('detect-btn').disabled = false;
+                            document.getElementById('search-btn').disabled = false;
+                            document.getElementById('target-type').textContent = data.target_type || '未知目标';
+                            document.getElementById('show-qwen-result-btn').disabled = false;
+                            
+                            updateProgress(100, '发现目标');
+                        }
+                    } else {
+                        clearInterval(progressInterval);
+                        
+                        if (data.success) {
+                            if (data.target_found) {
+                                addLog('搜索完成，发现目标', 'success');
+                                addMessage('搜索任务完成，已发现目标', false);
+                                updateProgress(100, '目标已发现');
+                            } else {
+                                addLog('搜索完成，未发现目标', 'warning');
+                                addMessage('搜索区域已覆盖完成，未发现指定目标', false);
+                                updateProgress(100, '搜索完成');
+                            }
+                        } else {
+                            addLog(`搜索任务失败: ${data.message}`, 'error');
+                            addMessage(`搜索任务失败: ${data.message}`, false);
+                            updateProgress(0, '任务失败');
+                        }
+                        
+                        document.getElementById('search-btn').disabled = false;
+                        setTimeout(() => updateProgress(0, '待命中'), 3000);
+                    }
+                } catch (error) {
+                    console.error('搜索进度轮询错误:', error);
+                }
+            }, 1000);
+        }
+        
+        // 精确检测目标
+        async function detectTarget() {
             try {
-                addLogEntry(`正在开始目标检测任务${targetType ? ': ' + targetType : ''}...`);
-                detectBtn.disabled = true;
+                addLog('开始精确目标检测...', 'info');
+                updateProgress(10, '目标定位中');
                 
+                document.getElementById('detect-btn').disabled = true;
+                
+                const targetType = document.getElementById('target-type-select').value;
                 const url = targetType 
                     ? `${API_BASE_URL}/detect_target?target_type=${encodeURIComponent(targetType)}`
                     : `${API_BASE_URL}/detect_target`;
                 
-                const response = await fetch(url, {
-                    method: 'POST'
-                });
-                
+                const response = await fetch(url, { method: 'POST' });
                 const data = await response.json();
                 
                 if (data.success) {
-                    addLogEntry(`目标检测成功! 类型: ${data.target_type}`, 'success');
-                    addChatMessage(`已成功检测到目标: ${data.target_type}`, 'system');
+                    addLog(`目标检测成功! 类型: ${data.target_type}`, 'success');
+                    addMessage(`成功定位目标: ${data.target_type}`, false);
                     
-                    // 显示目标状态
-                    targetStatus.classList.remove('hidden');
-                    targetType.textContent = data.target_type;
-                    targetPosition.textContent = `X: ${data.target_position.x.toFixed(2)}, Y: ${data.target_position.y.toFixed(2)}, Z: ${data.target_position.z.toFixed(2)}`;
+                    // 更新检测结果显示
+                    document.getElementById('target-type').textContent = data.target_type || '未知目标';
                     
-                    // 显示匹配信息
                     if (data.match_info) {
-                        matchInfoContainer.classList.remove('hidden');
-                        matchCount.textContent = data.match_info.match_count || '0';
-                        selectedKeypoint.textContent = data.match_info.selected_keypoint_id || '-';
-                        disparityValue.textContent = data.match_info.disparity ? `${data.match_info.disparity.toFixed(2)} 像素` : '-';
-                        depthValue.textContent = data.match_info.depth ? `${data.match_info.depth.toFixed(2)} 米` : '-';
+                        document.getElementById('match-count').textContent = `${data.match_info.match_count || 0} 个`;
+                        document.getElementById('depth-value').textContent = data.match_info.depth ? 
+                            `${data.match_info.depth.toFixed(2)} 米` : '-';
+                        document.getElementById('disparity-value').textContent = data.match_info.disparity ? 
+                            `${data.match_info.disparity.toFixed(2)} 像素` : '-';
                     }
                     
-                    // 更新相机图像
+                    // 更新目标坐标
+                    if (data.target_position) {
+                        const coords = `(${data.target_position.x.toFixed(1)}, ${data.target_position.y.toFixed(1)}, ${data.target_position.z.toFixed(1)})`;
+                        document.getElementById('target-coordinates').textContent = coords;
+                    }
+                    
+                    // 显示检测结果图像
                     if (data.image_url) {
-                        cameraFeed.src = data.image_url;
+                        document.getElementById('camera-feed').src = data.image_url + '?t=' + new Date().getTime();
+                        
+                        // 显示匹配结果卡片
+                        const matchCard = document.getElementById('match-results-card');
+                        const matchImage = document.getElementById('match-result-image');
+                        const matchPlaceholder = document.getElementById('match-placeholder');
+                        
+                        if (matchCard && matchImage && matchPlaceholder) {
+                            matchCard.style.display = 'block';
+                            matchImage.src = data.image_url + '?t=' + new Date().getTime();
+                            matchImage.style.display = 'block';
+                            matchPlaceholder.style.display = 'none';
+                        }
+                        
+                        // 启用查看Qwen结果按钮
+                        document.getElementById('show-qwen-result-btn').disabled = false;
                     }
                     
-                    // 启用绕飞按钮
-                    flyaroundBtn.disabled = false;
-                    targetDetected = true;
-                    detectBtn.disabled = false;
+                    document.getElementById('flyaround-btn').disabled = false;
+                    updateProgress(100, '目标已定位');
+                    
+                    setTimeout(() => updateProgress(0, '准备绕飞'), 2000);
+                    
+                    return data; // 返回数据供其他函数使用
                 } else {
-                    addLogEntry(`目标检测失败: ${data.message}`, 'error');
-                    addChatMessage(`目标检测失败: ${data.message}`, 'system');
+                    addLog(`目标检测失败: ${data.message}`, 'error');
+                    addMessage(`目标检测失败: ${data.message}`, false);
                     
-                    // 如果有错误图像，也显示出来
                     if (data.image_url) {
-                        cameraFeed.src = data.image_url;
+                        document.getElementById('camera-feed').src = data.image_url + '?t=' + new Date().getTime();
                     }
                     
-                    detectBtn.disabled = false;
+                    return null;
                 }
+                
             } catch (error) {
-                addLogEntry(`目标检测请求错误: ${error.message}`, 'error');
-                addChatMessage('目标检测请求失败', 'system');
-                detectBtn.disabled = false;
+                addLog(`目标检测请求错误: ${error.message}`, 'error');
+                addMessage('目标检测请求失败', false);
+                return null;
+            } finally {
+                document.getElementById('detect-btn').disabled = false;
             }
         }
         
         // 绕飞目标
         async function flyAroundTarget() {
-            if (!targetDetected) {
-                addLogEntry('请先检测目标!', 'warning');
-                addChatMessage('请先检测目标后再执行绕飞', 'system');
-                return;
-            }
-            
             try {
-                addLogEntry('正在开始绕飞任务...');
-                addChatMessage('开始执行绕飞任务', 'system');
-                flyaroundBtn.disabled = true;
+                addLog('开始绕飞任务...', 'info');
+                addMessage('开始执行绕飞任务', false);
+                updateProgress(5, '绕飞准备中');
+                
+                document.getElementById('flyaround-btn').disabled = true;
                 
                 const response = await fetch(`${API_BASE_URL}/fly_around`, {
                     method: 'POST'
                 });
                 
-                // 这是一个长时间运行的任务，所以我们立即设置进度条
-                updateMissionProgress(1);
-                
-                // 启动进度轮询
+                // 开始绕飞进度监控
                 pollMissionProgress();
             } catch (error) {
-                addLogEntry(`绕飞请求错误: ${error.message}`, 'error');
-                addChatMessage('绕飞请求失败', 'system');
-                flyaroundBtn.disabled = false;
+                addLog(`绕飞请求错误: ${error.message}`, 'error');
+                addMessage('绕飞请求失败', false);
+                document.getElementById('flyaround-btn').disabled = false;
             }
         }
         
-        // 轮询任务进度
+        // 监控绕飞进度
         async function pollMissionProgress() {
             const progressInterval = setInterval(async () => {
                 try {
@@ -819,46 +1501,96 @@
                     const data = await response.json();
                     
                     if (data.mission_active) {
-                        // 更新进度
-                        updateMissionProgress(data.progress);
+                        updateProgress(data.progress, '绕飞执行中');
                         
-                        // 更新位置信息
                         if (data.position) {
-                            posX.textContent = data.position.x.toFixed(2);
-                            posY.textContent = data.position.y.toFixed(2);
-                            posZ.textContent = data.position.z.toFixed(2);
+                            document.getElementById('pos-x').textContent = data.position.x.toFixed(2);
+                            document.getElementById('pos-y').textContent = data.position.y.toFixed(2);
+                            document.getElementById('pos-z').textContent = data.position.z.toFixed(2);
                         }
                     } else {
-                        // 任务完成
                         clearInterval(progressInterval);
                         
                         if (data.success) {
-                            addLogEntry('绕飞任务完成!', 'success');
-                            addChatMessage('绕飞任务已成功完成', 'system');
-                            updateMissionProgress(100);
+                            addLog('绕飞任务完成!', 'success');
+                            addMessage('绕飞任务已成功完成', false);
+                            updateProgress(100, '绕飞完成');
                             
-                            // 2秒后隐藏进度条
-                            setTimeout(() => {
-                                updateMissionProgress(0);
-                            }, 2000);
+                            setTimeout(() => updateProgress(0, '任务完成'), 2000);
                         } else {
-                            addLogEntry(`绕飞任务失败: ${data.message}`, 'error');
-                            addChatMessage(`绕飞任务失败: ${data.message}`, 'system');
-                            updateMissionProgress(0);
+                            addLog(`绕飞任务失败: ${data.message}`, 'error');
+                            addMessage(`绕飞任务失败: ${data.message}`, false);
+                            updateProgress(0, '任务失败');
                         }
                         
-                        flyaroundBtn.disabled = false;
+                        document.getElementById('flyaround-btn').disabled = false;
                     }
                 } catch (error) {
-                    console.error('轮询进度错误:', error);
+                    console.error('绕飞进度轮询错误:', error);
                 }
             }, 500);
         }
         
-        // 捕获单张图像
+        // 降落
+        async function land() {
+            try {
+                addLog('正在降落...', 'info');
+                updateProgress(20, '降落中');
+                
+                const response = await fetch(`${API_BASE_URL}/land`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    addLog('降落成功!', 'success');
+                    addMessage('无人机已安全降落', false);
+                    
+                    // 重置按钮状态
+                    document.getElementById('land-btn').disabled = true;
+                    document.getElementById('takeoff-btn').disabled = false;
+                    document.getElementById('search-btn').disabled = true;
+                    document.getElementById('detect-btn').disabled = true;
+                    document.getElementById('flyaround-btn').disabled = true;
+                    document.getElementById('show-qwen-result-btn').disabled = true;
+                    
+                    // 清除搜索路径
+                    searchPath = [];
+                    currentSearchIndex = 0;
+                    drawSearchPath();
+                    
+                    // 重置显示信息
+                    document.getElementById('target-type').textContent = '未检测';
+                    document.getElementById('match-count').textContent = '0 个';
+                    document.getElementById('depth-value').textContent = '-';
+                    document.getElementById('disparity-value').textContent = '-';
+                    document.getElementById('target-coordinates').textContent = '未定位';
+                    updateSearchCoverage(0);
+                    updateCompletedPoints(0, 0);
+                    
+                    // 隐藏匹配结果卡片
+                    const matchCard = document.getElementById('match-results-card');
+                    if (matchCard) {
+                        matchCard.style.display = 'none';
+                    }
+                    
+                    updateProgress(100, '降落完成');
+                    setTimeout(() => updateProgress(0, '待机中'), 2000);
+                } else {
+                    addLog(`降落失败: ${data.message}`, 'error');
+                    addMessage(`降落失败: ${data.message}`, false);
+                }
+            } catch (error) {
+                addLog(`降落请求错误: ${error.message}`, 'error');
+                addMessage('降落请求失败', false);
+            }
+        }
+        
+        // 捕获图像
         async function captureImage() {
             try {
-                addLogEntry('正在捕获图像...');
+                addLog('正在捕获图像...', 'info');
                 
                 const response = await fetch(`${API_BASE_URL}/capture_image`, {
                     method: 'POST'
@@ -867,167 +1599,56 @@
                 const data = await response.json();
                 
                 if (data.success && data.image_url) {
-                    cameraFeed.src = data.image_url;
-                    addLogEntry('图像捕获成功!', 'success');
+                    document.getElementById('camera-feed').src = data.image_url + '?t=' + new Date().getTime();
+                    addLog('图像捕获成功!', 'success');
                 } else {
-                    addLogEntry(`图像捕获失败: ${data.message}`, 'error');
+                    addLog(`图像捕获失败: ${data.message}`, 'error');
                 }
             } catch (error) {
-                addLogEntry(`图像捕获请求错误: ${error.message}`, 'error');
+                addLog(`图像捕获请求错误: ${error.message}`, 'error');
             }
         }
         
-        // 处理用户聊天输入
-        function handleChatInput() {
-            const message = chatInput.value.trim();
-            if (!message) return;
-            
-            // 添加用户消息
-            addChatMessage(message);
-            
-            // 清空输入框
-            chatInput.value = '';
-            
-            // 处理指令
-            processCommand(message);
-        }
-        
-        // 处理用户指令
-        async function processCommand(command) {
-            const lowerCommand = command.toLowerCase();
-            
-            // 连接指令
-            if (lowerCommand.includes('连接') || lowerCommand.includes('connect')) {
-                if (connectBtn.disabled) {
-                    addChatMessage('已经连接到AirSim', 'system');
-                } else {
-                    connectToAirSim();
-                }
-                return;
-            }
-            
-            // 起飞指令
-            if (lowerCommand.includes('起飞') || lowerCommand.includes('takeoff')) {
-                if (takeoffBtn.disabled) {
-                    if (landBtn.disabled) {
-                        addChatMessage('请先连接到AirSim', 'system');
-                    } else {
-                        addChatMessage('无人机已经起飞', 'system');
-                    }
-                } else {
-                    takeoff();
-                }
-                return;
-            }
-            
-            // 降落指令
-            if (lowerCommand.includes('降落') || lowerCommand.includes('land')) {
-                if (landBtn.disabled) {
-                    addChatMessage('无人机尚未起飞或已经降落', 'system');
-                } else {
-                    land();
-                }
-                return;
-            }
-            
-            // 检测目标指令
-            if (lowerCommand.includes('检测') || lowerCommand.includes('detect')) {
-                if (detectBtn.disabled && !takeoffBtn.disabled) {
-                    addChatMessage('请先起飞无人机', 'system');
-                    return;
-                }
-                
-                if (detectBtn.disabled && targetDetected) {
-                    addChatMessage('已经检测到目标', 'system');
-                    return;
-                }
-                
-                // 提取目标类型
-                let targetType = '';
-                
-                if (lowerCommand.includes('检测')) {
-                    const matches = lowerCommand.match(/检测\s*([^\s,，。.]+)/);
-                    if (matches && matches[1]) {
-                        targetType = matches[1];
-                    }
-                } else if (lowerCommand.includes('detect')) {
-                    const matches = lowerCommand.match(/detect\s*([^\s,，。.]+)/);
-                    if (matches && matches[1]) {
-                        targetType = matches[1];
-                    }
-                }
-                
-                // 执行检测
-                detectTarget(targetType);
-                return;
-            }
-            
-            // 绕飞指令
-            if (lowerCommand.includes('绕飞') || lowerCommand.includes('fly around')) {
-                if (flyaroundBtn.disabled && !targetDetected) {
-                    addChatMessage('请先检测目标', 'system');
-                } else if (flyaroundBtn.disabled) {
-                    addChatMessage('绕飞任务正在进行中', 'system');
-                } else {
-                    flyAroundTarget();
-                }
-                return;
-            }
-            
-            // 截图指令
-            if (lowerCommand.includes('截图') || lowerCommand.includes('拍照') || lowerCommand.includes('capture')) {
-                captureImage();
-                return;
-            }
-            
-            // 未识别的指令
-            addChatMessage('未识别的指令。可用指令: 连接、起飞、降落、检测 [目标类型]、绕飞、截图', 'system');
-        }
-        
-        // 事件监听器
-        connectBtn.addEventListener('click', connectToAirSim);
-        takeoffBtn.addEventListener('click', takeoff);
-        landBtn.addEventListener('click', land);
-        detectBtn.addEventListener('click', () => detectTarget());
-        flyaroundBtn.addEventListener('click', flyAroundTarget);
-        captureBtn.addEventListener('click', captureImage);
-        
-        // 聊天输入事件
-        chatSend.addEventListener('click', handleChatInput);
-        chatInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                handleChatInput();
-            }
-        });
-        
-        // PixStream Frame加载事件
-        pixstreamFrame.addEventListener('load', () => {
-            checkPixStreamConnection();
-        });
-        
-        // 定期检查连接状态
-        setInterval(checkPixStreamConnection, 2000);
-        
-        // 添加初始日志
-        addLogEntry('应用已初始化，等待连接...');
-        
-        // 轮询无人机位置
-        setInterval(async () => {
-            if (connectionStatus.textContent === '已连接') {
+        // 开始状态轮询
+        function startStatusPolling() {
+            setInterval(async () => {
                 try {
                     const response = await fetch(`${API_BASE_URL}/drone_status`);
                     const data = await response.json();
                     
                     if (data.connected) {
-                        posX.textContent = data.position.x.toFixed(2);
-                        posY.textContent = data.position.y.toFixed(2);
-                        posZ.textContent = data.position.z.toFixed(2);
+                        document.getElementById('pos-x').textContent = data.position.x.toFixed(2);
+                        document.getElementById('pos-y').textContent = data.position.y.toFixed(2);
+                        document.getElementById('pos-z').textContent = data.position.z.toFixed(2);
                     }
                 } catch (error) {
-                    console.error('获取无人机状态错误:', error);
+                    console.error('状态轮询错误:', error);
                 }
-            }
-        }, 1000);
+            }, 1000);
+        }
+        
+        // 事件监听器
+        document.getElementById('connect-btn').addEventListener('click', connectToAirSim);
+        document.getElementById('takeoff-btn').addEventListener('click', takeoff);
+        document.getElementById('land-btn').addEventListener('click', land);
+        document.getElementById('search-btn').addEventListener('click', startGridSearch);
+        document.getElementById('detect-btn').addEventListener('click', detectTarget);
+        document.getElementById('flyaround-btn').addEventListener('click', flyAroundTarget);
+        document.getElementById('capture-btn').addEventListener('click', captureImage);
+        document.getElementById('show-qwen-result-btn').addEventListener('click', showQwenResult);
+        
+        // 清除日志
+        document.getElementById('clear-logs').addEventListener('click', () => {
+            document.getElementById('logs-content').innerHTML = '';
+            addLog('日志已清除', 'info');
+        });
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', () => {
+            initSearchCanvas();
+            addLog('智能无人机任务系统已启动', 'success');
+            addMessage('系统已就绪，请先连接AirSim开始任务', false);
+        });
     </script>
 </body>
 </html>
